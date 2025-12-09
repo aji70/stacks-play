@@ -17,10 +17,10 @@ This project fuses **strategic gameplay** with **true digital ownership** and **
 
 | Detail | Info |
 |--------|------|
-| **Contract  Address** | `` |
+| **Contract  Address** | `ST81CZF1YK81CPAMS6PRS3GJSKK35MGZ2VWEPSEN.tycc` |
 | **Network** | Stacks |
 | **Status** |  — Functionality under development |
-| **ERC20 Address** | `` |
+
 
 ---
 
