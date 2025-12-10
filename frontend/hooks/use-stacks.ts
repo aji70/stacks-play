@@ -31,7 +31,7 @@ export function useStacks() {
     if (data) {
       const stxAddress = data.addresses?.stx?.[0]?.address;
       if (stxAddress) {
-        setNetwork(stxAddress.startsWith("ST") ? "testnet" : "mainnet");
+        setNetwork(stxAddress.startsWith("SP") ? "mainnet" : "testnet");
         setUserData(data);
       }
     } else {
