@@ -11,6 +11,7 @@ import { useStacks } from "@/hooks/use-stacks";
 import { useQuery } from "@tanstack/react-query";
 import { ApiResponse } from "@/types/api";
 import { useMediaQuery } from "@/useMediaQuery";
+import MobileGameLayout from "@/components/game/MobileGameLayout";
 
 export default function GamePlayPage() {
   const searchParams = useSearchParams();
@@ -139,7 +140,7 @@ const {
         <main className="w-full h-screen flex flex-col overflow-hidden">
           <div className="flex-1 w-full overflow-hidden">
             {activeTab === 'board' && (
-              <AiBoard
+              <MobileGameLayout
                 game={game}
                 properties={properties}
                 game_properties={game_properties}
