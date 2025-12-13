@@ -10,7 +10,7 @@
 (define-constant STATUS_PENDING u1)
 (define-constant STATUS_ONGOING u2)
 (define-constant STATUS_ENDED u3)
-(define-constant STAKE_AMOUNT u1000000)
+(define-constant STAKE_AMOUNT u1000000000)
 
 (define-constant MIN_TURNS_FOR_BONUS u10)
 (define-constant BONUS_MULTIPLIER u150) ;; 1.5x as uint (150%)

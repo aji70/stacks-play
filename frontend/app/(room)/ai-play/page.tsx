@@ -11,16 +11,18 @@ import { useStacks } from "@/hooks/use-stacks";
 import { useQuery } from "@tanstack/react-query";
 import { ApiResponse } from "@/types/api";
 import { useMediaQuery } from "@/components/useMediaQuery";
+import MobileGameLayout  from "@/components/game/MobileGameLayout";
+import MobilePlayerLayout from "@/components/game/MobilePlayerLayout";
 
 export default function GamePlayPage() {
   const searchParams = useSearchParams();
   const [gameCode, setGameCode] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<'board' | 'players'>('board');
+
   const isMobile = useMediaQuery("(max-width: 768px)");
 
-  const { userData } = useStacks();
+    const { userData } = useStacks();
   const address = userData?.addresses?.stx?.[0]?.address;
-  
+
 useEffect(() => {
   const code = searchParams.get("gameCode") || localStorage.getItem("gameCode");
 
@@ -57,8 +59,7 @@ const {
   refetchInterval: 5000,
 });
 
-
-  const me = useMemo(() => {
+    const me = useMemo(() => {
     if (!game?.players || !address) return null;
     return game.players.find(
       (pl: Player) => pl.address?.toLowerCase() === address.toLowerCase()
@@ -101,7 +102,6 @@ const {
   refetchInterval: 15000,
 });
 
-
   const my_properties: Property[] = useMemo(() => {
     if (!game_properties?.length || !properties?.length || !address) return [];
 
@@ -114,6 +114,9 @@ const {
       .sort((a, b) => a.id - b.id);
   }, [game_properties, properties, address]);
 
+  const [activeTab, setActiveTab] = useState<'board' | 'players'>('board');
+
+  
   if (gameLoading) {
     return (
       <div className="w-full min-h-screen flex items-center justify-center text-lg font-medium text-white">
@@ -121,7 +124,7 @@ const {
       </div>
     );
   }
-
+  
   if (gameError) {
     return (
       <div className="w-full min-h-screen flex items-center justify-center text-lg font-medium text-white">
@@ -129,9 +132,8 @@ const {
       </div>
     );
   }
-
   
-
+  console.log("is mobile?? ", isMobile, "game, ", game)
   if (isMobile) {
     if (!game) return null;
 
@@ -169,13 +171,13 @@ const {
           >
             Players
           </button>
-        </nav>
+        </nav> 
       </main>
     );
-  }
+  
+ }
 
-
-  return game && !propertiesLoading && !gamePropertiesLoading ? (
+   return game && !propertiesLoading && !gamePropertiesLoading ? ( 
     <main className="w-full h-screen overflow-x-hidden relative flex flex-row lg:gap-2">
       <GamePlayers
         game={game}

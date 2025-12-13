@@ -21,17 +21,14 @@ import {
 import { apiClient } from "@/lib/api";
 import toast, { Toaster } from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
+import { ApiResponse } from "@/types/api";
 
 interface CardPopup {
   type: "chance" | "community_chest";
   message: string;
 }
 
-interface ApiResponse<T = any> {
-  success: boolean;
-  message?: string;
-  data?: T;
-}
+
 
 // ==================== AI DECISION ENGINE ====================
 const MONOPOLY_STATS = {
