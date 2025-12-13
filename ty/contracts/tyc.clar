@@ -164,6 +164,15 @@
   (map-get? game-codes code)
 )
 
+(define-read-only (get-player-balance (player principal))
+  (stx-get-balance player)
+)
+
+(define-read-only (get-owner)
+  (stx-get-balance CONTRACT-PRINCIPAL)
+)
+
+
 ;; ---- PUBLIC FUNCTIONS ----
 
 (define-public (register (username (string-ascii 32)))
@@ -212,7 +221,7 @@
 
     (asserts! (>= caller-balance bet-amount) ERR_INVALID_BALANCE)  
 
-    (try! (stx-transfer? bet-amount CONTRACT-PRINCIPAL caller))
+    (try! (stx-transfer? bet-amount  caller CONTRACT-PRINCIPAL))
 
 
     
@@ -291,7 +300,7 @@
     (asserts! (> starting-balance u0) ERR_INVALID_STARTING_BALANCE)
 
     (asserts! (>= caller-balance STAKE_AMOUNT) ERR_INVALID_BALANCE)  
-    (try! (stx-transfer? STAKE_AMOUNT CONTRACT-PRINCIPAL caller))
+    (try! (stx-transfer? STAKE_AMOUNT caller CONTRACT-PRINCIPAL ))
 
     (let (
         (user (unwrap! user-data (err u999)))
@@ -370,7 +379,7 @@
 
     
     (asserts! (>= caller-balance STAKE_AMOUNT) ERR_INVALID_BALANCE)  
-    (try! (stx-transfer? STAKE_AMOUNT CONTRACT-PRINCIPAL caller))
+    (try! (stx-transfer? STAKE_AMOUNT caller CONTRACT-PRINCIPAL ))
 
       (let (
           (order (+ (get joined-players game) u1))
