@@ -174,7 +174,7 @@
 
     (map-set users caller { 
       username: username, 
-      registered-at: stacks-block-time,
+      registered-at: stacks-block-height,
       games-played: u0,
       games-won: u0,
       games-lost: u0,
@@ -204,7 +204,7 @@
     (asserts! (and (>= number-of-players u2) (<= number-of-players u8)) ERR_INVALID_PLAYER_COUNT)
     (asserts! (> starting-balance u0) ERR_INVALID_STARTING_BALANCE)
 
-    (try! (stx-transfer? bet-amount caller (as-contract tx-sender)))
+    ;; (try! (stx-transfer? bet-amount caller (as-contract tx-sender)))
 
     (let (
         (user (unwrap! user-data (err u999)))
@@ -220,7 +220,7 @@
           status: STATUS_PENDING,
           next-player: caller,
           next-p: u1,
-          created-at: stacks-block-time,
+          created-at: stacks-block-height,
           ended-at: u0,
           total-staked: bet-amount,
           bet-amount: bet-amount
@@ -294,7 +294,7 @@
           status: STATUS_ONGOING,
           next-player: caller,
           next-p: u1,
-          created-at: stacks-block-time,
+          created-at: stacks-block-height,
           ended-at: u0,
           total-staked: STAKE_AMOUNT,
           bet-amount: STAKE_AMOUNT
@@ -458,7 +458,7 @@
         (final-game (merge game {
           status: STATUS_ENDED,
           winner: (some winner),
-          ended-at: stacks-block-time
+          ended-at: stacks-block-height
         }))
       )
 
@@ -508,7 +508,7 @@
               (final-game (merge updated-game {
                 status: u3,
                 winner: (some final-player),
-                ended-at: stacks-block-time
+                ended-at: stacks-block-height
               }))
             )
             ;; persist final state
