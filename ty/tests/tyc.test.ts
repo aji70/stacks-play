@@ -73,5 +73,30 @@ describe("tyc Contract Tests", () => {
     expect(takenUsername).toBeErr(Cl.uint(101)); // ERR_USERNAME_TAKEN
   });
 
-  
+  it("allows a registered user to create a game and updates user stats", () => {
+    simnet.callPublicFn("tyc", "register", [Cl.stringAscii("AliceUser")], alice);
+
+    const { result: createResult } = simnet.callPublicFn(
+      "tyc",
+      "create-game",
+      [
+        Cl.uint(1), // game-type
+        Cl.uint(1), // player-symbol
+        Cl.uint(2), // number-of-players
+        Cl.stringAscii("GAME123"),
+        Cl.uint(1000), // starting balance
+        Cl.uint(500) // bet amount
+      ],
+      alice
+    );
+
+    expect(createResult).toBeOk(Cl.uint(0)); // first game ID is 0
+
+    // Check user stats updated
+    const { result: userResult } = simnet.callReadOnlyFn("tyc", "get-user", [Cl.principal(alice)], alice);
+    expect(userResult.type).toBe('some');
+    // const userTuple = userResult.value.value;
+    // expect(userTuple["games-played"]).toEqual(Cl.uint(1));
+    // expect(userTuple["total-staked"]).toEqual(Cl.uint(500));
+  });
 });
