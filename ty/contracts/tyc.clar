@@ -210,7 +210,7 @@
     (asserts! (and (>= number-of-players u2) (<= number-of-players u8)) ERR_INVALID_PLAYER_COUNT)
     (asserts! (> starting-balance u0) ERR_INVALID_STARTING_BALANCE)
 
-    (asserts! (> caller-balance bet-amount) ERR_INVALID_BALANCE)  
+    (asserts! (>= caller-balance bet-amount) ERR_INVALID_BALANCE)  
 
     (try! (stx-transfer? bet-amount CONTRACT-PRINCIPAL caller))
 
@@ -284,12 +284,14 @@
       (game-id (var-get latest-game-id))
       (user-data (map-get? users caller))
       (all-players (+ number-of-ai-players u1)) 
+      (caller-balance (stx-get-balance tx-sender))
     )
     (asserts! (is-some user-data) ERR_NOT_REGISTERED)
     (asserts! (and (>= number-of-ai-players u1) (<= number-of-ai-players u8)) ERR_INVALID_PLAYER_COUNT)
     (asserts! (> starting-balance u0) ERR_INVALID_STARTING_BALANCE)
 
-    ;; (try! (stx-transfer? STAKE_AMOUNT caller (as-contract tx-sender)))
+    (asserts! (>= caller-balance STAKE_AMOUNT) ERR_INVALID_BALANCE)  
+    (try! (stx-transfer? STAKE_AMOUNT CONTRACT-PRINCIPAL caller))
 
     (let (
         (user (unwrap! user-data (err u999)))
@@ -357,14 +359,18 @@
     (let (
         (game (unwrap! game-opt (err u200)))
         (user (unwrap! user-opt (err u201)))
+        
         (joined-player (map-get? game-players { game-id: game-id, player: caller }))
+        (caller-balance (stx-get-balance tx-sender))
       )
 
       (asserts! (is-eq (get status game) STATUS_PENDING) ERR_GAME_NOT_OPEN)
       (asserts! (< (get joined-players game) (get number-of-players game)) ERR_GAME_FULL)
       (asserts! (not (is-some joined-player)) ERR_ALREADY_JOINED)
 
-    ;;   (try! (stx-transfer? (get bet-amount game) caller (as-contract tx-sender)))
+    
+    (asserts! (>= caller-balance STAKE_AMOUNT) ERR_INVALID_BALANCE)  
+    (try! (stx-transfer? STAKE_AMOUNT CONTRACT-PRINCIPAL caller))
 
       (let (
           (order (+ (get joined-players game) u1))
@@ -474,7 +480,8 @@
       )
 
       ;; Payout: transfer total-staked to winner (bonus hypothetical; adjust as needed)
-    ;;   (try! (as-contract (stx-transfer? total-staked tx-sender winner)))
+    (try! (stx-transfer? total-staked tx-sender winner))
+
       (map-set users winner updated-winner-user)
       (map-set games game-id final-game)
 
