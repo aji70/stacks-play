@@ -17,7 +17,7 @@ This project fuses **strategic gameplay** with **true digital ownership** and **
 
 | Detail | Info |
 |--------|------|
-| **Contract  Address** | `ST81CZF1YK81CPAMS6PRS3GJSKK35MGZ2VWEPSEN.tycc` |
+| **Contract  Address** | `SP81CZF1YK81CPAMS6PRS3GJSKK35MGZ2R9SNESA.tycc` |
 | **Network** | Stacks |
 | **Status** |  — Functionality under development |
 

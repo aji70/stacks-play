@@ -141,7 +141,7 @@ const {
       <main className="w-full h-screen flex flex-col overflow-hidden">
         <div className="flex-1 w-full overflow-hidden">
           {activeTab === 'board' && (
-            <AiBoard
+            <MobileGameLayout
               game={game}
               properties={properties}
               game_properties={game_properties}
@@ -149,7 +149,7 @@ const {
             />
           )}
           {activeTab === 'players' && (
-            <GamePlayers
+            <MobilePlayerLayout
               game={game}
               properties={properties}
               game_properties={game_properties}

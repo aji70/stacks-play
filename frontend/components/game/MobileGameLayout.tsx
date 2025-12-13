@@ -155,20 +155,6 @@ const getDiceValues = (): { die1: number; die2: number; total: number } | null =
   return total === 12 ? null : { die1, die2, total };
 };
 
-const getMockCardMessage = (type: "chance" | "community_chest") => {
-  const chanceCards = [
-    "Advance to Go (Collect $200)",
-    "Bank pays you dividend of $50",
-    "Pay poor tax of $15",
-  ];
-  const communityCards = [
-    "Advance to Go (Collect $200)",
-    "Doctor's fee. Pay $50",
-    "You inherit $100",
-  ];
-  const cards = type === "chance" ? chanceCards : communityCards;
-  return cards[Math.floor(Math.random() * cards.length)];
-};
 
 const isTopHalf = (square: Property) => square.grid_row === 1;
 
@@ -189,7 +175,6 @@ const MobileGameLayout = ({
   const [isRolling, setIsRolling] = useState(false);
   const [pendingRoll, setPendingRoll] = useState(0);
   const [actionLock, setActionLock] = useState<"ROLL" | "END" | null>(null);
-  const [currentCard, setCurrentCard] = useState<CardPopup | null>(null);
   const [buyPrompted, setBuyPrompted] = useState(false);
   const [showLog, setShowLog] = useState(false); // For collapsible log
   const [focusedProperty, setFocusedProperty] = useState<Property | null>(null); // For modal inspect
