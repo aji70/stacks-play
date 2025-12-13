@@ -11,6 +11,9 @@
 (define-constant STATUS_ONGOING u2)
 (define-constant STATUS_ENDED u3)
 (define-constant STAKE_AMOUNT u1000000000)
+(define-constant CONTRACT-PRINCIPAL 'SP81CZF1YK81CPAMS6PRS3GJSKK35MGZ2R9SNESA)
+
+
 
 (define-constant MIN_TURNS_FOR_BONUS u10)
 (define-constant BONUS_MULTIPLIER u150) ;; 1.5x as uint (150%)
@@ -118,6 +121,8 @@
 (define-constant ERR_INVALID_PLAYER_COUNT (err u103))
 (define-constant ERR_INVALID_STARTING_BALANCE (err u104))
 (define-constant ERR_NOT_REGISTERED (err u105))
+(define-constant ERR_INVALID_BALANCE (err u106))
+
 
 (define-constant ERR_GAME_NOT_FOUND (err u200))
 (define-constant ERR_USER_NOT_REGISTERED (err u201))
@@ -199,12 +204,18 @@
       (caller tx-sender)
       (game-id (var-get latest-game-id))
       (user-data (map-get? users caller))
+      (caller-balance (stx-get-balance tx-sender))
     )
     (asserts! (is-some user-data) ERR_NOT_REGISTERED)
     (asserts! (and (>= number-of-players u2) (<= number-of-players u8)) ERR_INVALID_PLAYER_COUNT)
     (asserts! (> starting-balance u0) ERR_INVALID_STARTING_BALANCE)
 
-    ;; (try! (stx-transfer? bet-amount caller (as-contract tx-sender)))
+    (asserts! (> caller-balance bet-amount) ERR_INVALID_BALANCE)  
+
+    (try! (stx-transfer? bet-amount CONTRACT-PRINCIPAL caller))
+
+
+    
 
     (let (
         (user (unwrap! user-data (err u999)))
