@@ -174,7 +174,7 @@
 
     (map-set users caller { 
       username: username, 
-      registered-at: stacks-block-height,
+      registered-at: stacks-block-time,
       games-played: u0,
       games-won: u0,
       games-lost: u0,
@@ -220,7 +220,7 @@
           status: STATUS_PENDING,
           next-player: caller,
           next-p: u1,
-          created-at: stacks-block-height,
+          created-at: stacks-block-time,
           ended-at: u0,
           total-staked: bet-amount,
           bet-amount: bet-amount
@@ -294,7 +294,7 @@
           status: STATUS_ONGOING,
           next-player: caller,
           next-p: u1,
-          created-at: stacks-block-height,
+          created-at: stacks-block-time,
           ended-at: u0,
           total-staked: STAKE_AMOUNT,
           bet-amount: STAKE_AMOUNT
@@ -458,7 +458,7 @@
         (final-game (merge game {
           status: STATUS_ENDED,
           winner: (some winner),
-          ended-at: stacks-block-height
+          ended-at: stacks-block-time
         }))
       )
 
@@ -508,7 +508,7 @@
               (final-game (merge updated-game {
                 status: u3,
                 winner: (some final-player),
-                ended-at: stacks-block-height
+                ended-at: stacks-block-time
               }))
             )
             ;; persist final state
