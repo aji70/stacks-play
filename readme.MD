@@ -5,7 +5,7 @@
 
 **Stacks** is a thrilling blockchain-based **Tycoon game** inspired by the classic **Monopoly** board game — built on the **Stacks Network**.  
 Players can **buy, sell, and trade virtual properties as NFTs**, collect rent, build monopolies, and compete in a **decentralized on-chain economy**.
-
+Also available on Base and Celo
 This project fuses **strategic gameplay** with **true digital ownership** and **transparent, verifiable mechanics** powered by smart contracts.
 
 > 🚧 **Currently in active development** — Frontend (React + Next.js) and smart contracts are being actively improved.  
@@ -17,7 +17,9 @@ This project fuses **strategic gameplay** with **true digital ownership** and **
 
 | Detail | Info |
 |--------|------|
-| **Contract  Address** | `SP81CZF1YK81CPAMS6PRS3GJSKK35MGZ2R9SNESA.tycc` |
+| **Contract  Address** | `SP81CZF1YK81CPAMS6PRS3GJSKK35MGZ2R9SNESA.tyc` |
+| **Contract Base Address** | `0x8122F36B24D475E5d4F103C0787EC34b8019477b` |
+| **Contract Celo Address** | `0x8654ca15F361740C45c92E4728aEf32197D01A5c` |
 | **Network** | Stacks |
 | **Status** |  — Functionality under development |
 
