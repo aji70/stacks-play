@@ -278,7 +278,7 @@
     (asserts! (and (>= number-of-ai-players u1) (<= number-of-ai-players u8)) ERR_INVALID_PLAYER_COUNT)
     (asserts! (> starting-balance u0) ERR_INVALID_STARTING_BALANCE)
 
-    (try! (stx-transfer? STAKE_AMOUNT caller (as-contract tx-sender)))
+    ;; (try! (stx-transfer? STAKE_AMOUNT caller (as-contract tx-sender)))
 
     (let (
         (user (unwrap! user-data (err u999)))
@@ -353,7 +353,7 @@
       (asserts! (< (get joined-players game) (get number-of-players game)) ERR_GAME_FULL)
       (asserts! (not (is-some joined-player)) ERR_ALREADY_JOINED)
 
-      (try! (stx-transfer? (get bet-amount game) caller (as-contract tx-sender)))
+    ;;   (try! (stx-transfer? (get bet-amount game) caller (as-contract tx-sender)))
 
       (let (
           (order (+ (get joined-players game) u1))
@@ -463,7 +463,7 @@
       )
 
       ;; Payout: transfer total-staked to winner (bonus hypothetical; adjust as needed)
-      (try! (as-contract (stx-transfer? total-staked tx-sender winner)))
+    ;;   (try! (as-contract (stx-transfer? total-staked tx-sender winner)))
       (map-set users winner updated-winner-user)
       (map-set games game-id final-game)
 
