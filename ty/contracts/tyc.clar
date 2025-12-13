@@ -11,7 +11,7 @@
 (define-constant STATUS_ONGOING u2)
 (define-constant STATUS_ENDED u3)
 (define-constant STAKE_AMOUNT u1000000000)
-(define-constant CONTRACT-PRINCIPAL 'SP81CZF1YK81CPAMS6PRS3GJSKK35MGZ2R9SNESA)
+(define-constant CONTRACT-PRINCIPAL current-contract)
 
 
 
@@ -92,6 +92,10 @@
   (string-ascii 32)
   principal
 )
+(define-map payouts
+  principal
+  uint
+)
 (define-map game-codes
   (string-ascii 32)
   {
@@ -114,6 +118,8 @@
 
 )
 
+
+
 ;; ---- ERROR CONSTANTS ----
 (define-constant ERR_ALREADY_REGISTERED (err u100))
 (define-constant ERR_USERNAME_TAKEN (err u101))
@@ -122,6 +128,10 @@
 (define-constant ERR_INVALID_STARTING_BALANCE (err u104))
 (define-constant ERR_NOT_REGISTERED (err u105))
 (define-constant ERR_INVALID_BALANCE (err u106))
+(define-constant ERR_GAME_NOT_ENDED (err u107))
+(define-constant ERR_NO_WINNER (err u108))
+(define-constant ERR_NOT_WINNER (err u109))
+(define-constant ERR_ALREADY_CLAIMED (err u110))
 
 
 (define-constant ERR_GAME_NOT_FOUND (err u200))
@@ -221,7 +231,7 @@
 
     (asserts! (>= caller-balance bet-amount) ERR_INVALID_BALANCE)  
 
-    (try! (stx-transfer? bet-amount  caller CONTRACT-PRINCIPAL))
+    ;; (try! (stx-transfer? bet-amount  caller CONTRACT-PRINCIPAL))
 
 
     
@@ -299,8 +309,8 @@
     (asserts! (and (>= number-of-ai-players u1) (<= number-of-ai-players u8)) ERR_INVALID_PLAYER_COUNT)
     (asserts! (> starting-balance u0) ERR_INVALID_STARTING_BALANCE)
 
-    (asserts! (>= caller-balance STAKE_AMOUNT) ERR_INVALID_BALANCE)  
-    (try! (stx-transfer? STAKE_AMOUNT caller CONTRACT-PRINCIPAL ))
+    ;; (asserts! (>= caller-balance STAKE_AMOUNT) ERR_INVALID_BALANCE)  
+    ;; (try! (stx-transfer? STAKE_AMOUNT caller CONTRACT-PRINCIPAL ))
 
     (let (
         (user (unwrap! user-data (err u999)))
@@ -378,8 +388,8 @@
       (asserts! (not (is-some joined-player)) ERR_ALREADY_JOINED)
 
     
-    (asserts! (>= caller-balance STAKE_AMOUNT) ERR_INVALID_BALANCE)  
-    (try! (stx-transfer? STAKE_AMOUNT caller CONTRACT-PRINCIPAL ))
+    ;; (asserts! (>= caller-balance STAKE_AMOUNT) ERR_INVALID_BALANCE)  
+    ;; (try! (stx-transfer? STAKE_AMOUNT caller CONTRACT-PRINCIPAL ))
 
       (let (
           (order (+ (get joined-players game) u1))
@@ -488,9 +498,8 @@
         }))
       )
 
-      ;; Payout: transfer total-staked to winner (bonus hypothetical; adjust as needed)
-    (try! (stx-transfer? total-staked tx-sender winner))
-
+    
+      (map-set payouts winner total-staked )
       (map-set users winner updated-winner-user)
       (map-set games game-id final-game)
 
@@ -499,6 +508,43 @@
     )
   )
 )
+
+;; (define-public (withdraw-payout (game-id uint))
+;;   (let (
+;;         ;; Fetch game
+;;         (game-opt (map-get? games game-id))
+;;       )
+;;     (unwrap-panic game-opt) ;; abort if game doesn't exist
+
+;;     (let ((game (unwrap! game-opt ERR_GAME_NOT_FOUND)))
+;;       ;; Only allow if game has ended
+;;       (asserts! (is-eq (get status game) STATUS_ENDED) ERR_GAME_NOT_ENDED)
+
+;;       ;; Only winner can withdraw
+;;       (let ((winner (unwrap! (get winner game) ERR_NO_WINNER)))
+;;         (asserts! (is-eq tx-sender winner) ERR_NOT_WINNER)
+
+;;         ;; Check if payout already claimed
+;;         (let ((payout-opt (map-get? payouts winner)))
+;;           (asserts! (is-none payout-opt) ERR_ALREADY_CLAIMED)
+
+;;           ;; Amount to pay
+;;           (let ((amount (get total-staked game)))
+;;             ;; Record payout claimed
+;;             (map-set payouts tx-sender amount)
+
+;;             ;; Send STX to winner (tx-sender)
+;;             (try! (stx-transfer? amount tx-sender tx-sender))
+
+;;             ;; Return OK with amount
+;;             (ok amount)
+;;           )
+;;         )
+;;       )
+;;     )
+;;   )
+;; )
+
 
 
 (define-public (remove-player (game-id uint) (player principal) (final-candidate (optional principal)) (total-turns uint))
