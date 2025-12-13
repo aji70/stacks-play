@@ -4,10 +4,10 @@ import { Cl } from "@stacks/transactions";
 
 const accounts = simnet.getAccounts();
 const alice = accounts.get("wallet_1")!;
-// const bob = accounts.get("wallet_2")!;
-// const charlie = accounts.get("wallet_3")!;
-// const dave = accounts.get("wallet_4")!;
-// const accounts = simnet.getAccounts();
+const bob = accounts.get("wallet_2")!;
+const charlie = accounts.get("wallet_3")!;
+const dave = accounts.get("wallet_4")!;
+
 
 
 /*
@@ -46,4 +46,32 @@ describe("tyc Contract Tests", () => {
 
     expect(isRegisteredResult).toEqual(Cl.bool(true));
   });
+
+    it("prevents duplicate registration", () => {
+    simnet.callPublicFn("tyc", "register", [Cl.stringAscii("AliceUser")], alice);
+
+    const { result: secondAttempt } = simnet.callPublicFn(
+      "tyc",
+      "register",
+      [Cl.stringAscii("AliceUser")],
+      alice
+    );
+
+    expect(secondAttempt).toBeErr(Cl.uint(100)); // ERR_ALREADY_REGISTERED
+  });
+
+   it("rejects taken usernames", () => {
+    simnet.callPublicFn("tyc", "register", [Cl.stringAscii("AliceUser")], alice);
+
+    const { result: takenUsername } = simnet.callPublicFn(
+      "tyc",
+      "register",
+      [Cl.stringAscii("AliceUser")],
+      bob
+    );
+
+    expect(takenUsername).toBeErr(Cl.uint(101)); // ERR_USERNAME_TAKEN
+  });
+
+  
 });
