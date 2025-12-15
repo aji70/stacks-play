@@ -13,7 +13,7 @@ const Footer = () => {
         <Logo className="md:w-[60px] w-[55px]" image={logo} href="/" />
 
         <p className="text-[#F0F7F7] text-[12px] font-dmSans font-[400]">
-          ©{new Date().getFullYear()} Blockopoly &bull; All rights reserved.{" "}
+          ©{new Date().getFullYear()} Tycoon &bull; All rights reserved.{" "}
         </p>
 
         <div className="flex items-center gap-5">
