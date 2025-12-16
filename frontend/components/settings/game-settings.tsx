@@ -68,32 +68,9 @@ export default function Page() {
   const [isPending, setIsPending] = useState(false);
   const [isRegisteredLoading, setIsRegisteredLoading] = useState(false); // Start as true if checking on mount
   const [isRegistered, setIsRegistered] = useState(true); // Store the result separately
-  const [displayBetAmount, setDisplayBetAmount] = useState(1); // Display in STX
   const gameCode = settings.code;
   const playerSymbol = settings.symbol;
-  const numberOfPlayers = settings.maxPlayers;
-  const username = tycoonUser?.username;
-  
-
-  // Run the registration check on component mount (async if needed)
-  // useEffect(() => {
-  //   const checkRegistration = async () => {
-  //     setIsRegisteredLoading(true);
-  //     try {
-  //       const registered = await checkIfRegistered(); // Assume it can be async; if not, remove await
-
-  //       setIsRegistered(registered);
-  //     } catch (error) {
-  //       console.error("Error checking registration:", error);
-  //       toast.error("Failed to check registration. Please try again.");
-  //       setIsRegistered(false); // Default to false on error
-  //     } finally {
-  //       setIsRegisteredLoading(false);
-  //     }
-  //   };
-  //   checkRegistration();
-  // }, [checkIfRegistered]); // Dependency on the function
-  
+  const numberOfPlayers = settings.maxPlayers;  
 
   const handleSettingChange = (
     key: keyof Settings,
