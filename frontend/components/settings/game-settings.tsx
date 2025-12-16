@@ -119,19 +119,21 @@ export default function Page() {
       return;
     }
 
-    const betAmount = Math.round(displayBetAmount * 1000000); // Convert STX to microstacks
+
 
     setIsPending(true); // Start pending state
     const toastId = toast.loading("Creating game...", { position: "top-right" });
 
     try {
       const gameType = settings.privateRoom ? 1 : 0;
-      await handleCreateGame(gameType, playerSymbol, numberOfPlayers, gameCode, settings.startingCash, betAmount);
+      await handleCreateGame(gameType, playerSymbol, numberOfPlayers, gameCode, settings.startingCash, 1);
 
       // Add 3-second delay
       await new Promise(resolve => setTimeout(resolve, 3000));
 
       const onChainGameId: ClarityValue | null = await handleGetGameByCode(gameCode);
+
+      console.log("On-chain game ID:", onChainGameId);
 
       if (!onChainGameId) throw new Error("On-chain game failed");
 
@@ -149,7 +151,7 @@ export default function Page() {
         address,
         symbol: playerSymbol,
         number_of_players: numberOfPlayers,
-        bet_amount: betAmount,
+        bet_amount: 1,
         settings: {
           auction: settings.auction,
           rent_in_prison: settings.rentInPrison,
@@ -301,7 +303,7 @@ export default function Page() {
             </div>
 
             {/* Bet Amount */}
-            <div className="p-4 rounded-xl border border-red-500/30 bg-gradient-to-br from-red-900/50 to-orange-900/50">
+            {/* <div className="p-4 rounded-xl border border-red-500/30 bg-gradient-to-br from-red-900/50 to-orange-900/50">
               <div className="flex items-center gap-2 mb-2">
                 <FaCoins className="w-5 h-5 text-red-400" />
                 <h3 className="text-lg text-red-300 font-bold">Bet Amount (STX)</h3>
@@ -313,7 +315,7 @@ export default function Page() {
                 onChange={(e) => setDisplayBetAmount(Number(e.target.value))}
                 className="h-10 w-full bg-black/40 border-red-500/50 text-white px-3 rounded-md text-sm"
               />
-            </div>
+            </div> */}
 
           </div>
 

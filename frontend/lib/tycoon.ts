@@ -187,11 +187,7 @@ export async function createGame(
   startingBalance: number,
   betAmount: number
 ) {
-  // Client-side validation (mirrors contract checks)
-  // const usernameBytes = new TextEncoder().encode(creatorUsername).length;
-  // if (usernameBytes === 0 || usernameBytes > 32) {
-  //   throw new Error("Username must be 1-32 characters long");
-  // }
+
   const codeBytes = new TextEncoder().encode(code).length;
   if (codeBytes === 0 || codeBytes > 32) {
     throw new Error("Code must be 1-32 characters long");
