@@ -96,7 +96,7 @@ export default function Page() {
       return;
     }
 
-
+console.log("gameCode:", gameCode);
 
     setIsPending(true); // Start pending state
     const toastId = toast.loading("Creating game...", { position: "top-right" });
@@ -106,7 +106,7 @@ export default function Page() {
       await handleCreateGame(gameType, playerSymbol, numberOfPlayers, gameCode, settings.startingCash, 1);
 
       // Add 3-second delay
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      await new Promise(resolve => setTimeout(resolve, 5000));
 
       const onChainGameId: ClarityValue | null = await handleGetGameByCode(gameCode);
 
