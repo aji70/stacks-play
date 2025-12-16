@@ -19,8 +19,8 @@ import { getPlayerSymbolData, PlayerSymbol, symbols } from "@/lib/types/symbol";
 import { ApiResponse } from "@/types/api";
 import { TupleCV } from "@stacks/transactions";
 
-const POLL_INTERVAL = 500000; // ms
-const COPY_FEEDBACK_MS = 200000;
+const POLL_INTERVAL = 5000; // ms
+const COPY_FEEDBACK_MS = 2000;
 
 export default function GameWaiting() {
   const router = useRouter();
@@ -45,32 +45,6 @@ export default function GameWaiting() {
   const [joinedPlayers, setJoinedPlayers] = useState<number | null>(null);
   const [numberOfPlayers, setNumberOfPlayers] = useState<number | null>(null);
   const [stakeAmount, setStakeAmount] = useState<number>(0);
-
-  useEffect(() => {
-    const fetchContractGame = async () => {
-      try {
-        setLoading(true);
-        const data = await handleGetGameByCode(gameCode);
-        const tuple = data as TupleCV;
-        const gameId = tuple.value.id as TupleCV;
-        const jp = tuple.value["joined-players"] as TupleCV;
-        const nop = tuple.value["number-of-players"] as TupleCV;
-        const stake = tuple.value["bet-amount"] as TupleCV;
-        setStakeAmount(Number(stake.value));
-        setId(Number(gameId.value));
-        setJoinedPlayers(Number(jp.value));
-        setNumberOfPlayers(Number(nop.value));
-      } catch (err: unknown) {
-        console.error("Failed to fetch game:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchContractGame();
-  }, [gameCode, handleGetGameByCode]);
-
-  const contractId = id ?? null;
 
   // Keep a ref to mounted state to avoid state updates after unmount
   const mountedRef = useRef(true);
@@ -130,100 +104,98 @@ export default function GameWaiting() {
     [address]
   );
 
-  // fetch game state with visibility-aware polling and AbortController
   useEffect(() => {
-    if (!gameCode) {
-      setError("No game code provided. Please enter a valid game code.");
-      setLoading(false);
-      return;
-    }
+  if (!gameCode) {
+    setError("No game code provided.");
+    setLoading(false);
+    return;
+  }
 
-    const abort = new AbortController();
-    let pollTimer: number | null = null;
+  const abort = new AbortController();
 
-    const fetchOnce = async () => {
-      setError(null);
-      try {
-        const res = await apiClient.get<ApiResponse>(
-          `/games/code/${encodeURIComponent(gameCode)}`
-        );
+  const fetchOnce = async () => {
+    setError(null);
+    try {
+      // Fetch contract data first (poll it every time)
+      const data = await handleGetGameByCode(gameCode);
+      const tuple = data as TupleCV;
+      const gameId = tuple.value.id as TupleCV;
+      const jp = tuple.value["joined-players"] as TupleCV;
+      const nop = tuple.value["number-of-players"] as TupleCV;
+      const stake = tuple.value["bet-amount"] as TupleCV;
+      const newStakeAmount = Number(stake.value);
+      const newId = Number(gameId.value);
+      const newJoinedPlayers = Number(jp.value);
+      const newNumberOfPlayers = Number(nop.value);
 
-        if (!res?.success) return;
+      if (newStakeAmount !== stakeAmount) setStakeAmount(newStakeAmount);
+      if (newId !== id) setId(newId);
+      if (newJoinedPlayers !== joinedPlayers) setJoinedPlayers(newJoinedPlayers);
+      if (newNumberOfPlayers !== numberOfPlayers) setNumberOfPlayers(newNumberOfPlayers);
 
-        const gameData = res?.data;
-        if (!gameData) throw new Error(`Game ${gameCode} not found`);
+      // Fetch API data
+      const res = await apiClient.get<ApiResponse>(`/games/code/${encodeURIComponent(gameCode)}`);
+      if (!res?.success) return;
 
-        // Redirect if already running
-        if (gameData.status === "RUNNING") {
-          router.push(`/game-play?gameCode=${encodeURIComponent(gameCode)}`);
-          return;
+      const gameData = res.data;
+      if (!gameData) throw new Error(`Game ${gameCode} not found`);
+
+      // Check if full based on contract (authoritative), redirect if full
+      if (newJoinedPlayers === newNumberOfPlayers) {
+        // If API status is still PENDING, update it
+        if (gameData.status === "PENDING") {
+          await apiClient.put<ApiResponse>(`/games/${gameData.id}`, { status: "RUNNING" });
         }
-
-        if (gameData.status !== "PENDING") {
-          throw new Error(`Game ${gameCode} is not open for joining.`);
-        }
-
-        // Check if data has changed before updating state (reduces unnecessary re-renders)
-        const gameDataStr = JSON.stringify(gameData);
-        const currentGameStr = JSON.stringify(game);
-        if (gameDataStr !== currentGameStr) {
-          setGame(gameData);
-          setAvailableSymbols(computeAvailableSymbols(gameData));
-          setIsJoined(checkPlayerJoined(gameData));
-        }
-
-        // Auto-start if all players joined
-        if (gameData.players.length === gameData.number_of_players) {
-          const updateRes = await apiClient.put<ApiResponse>(
-            `/games/${gameData.id}`,
-            { status: "RUNNING" }
-          );
-          if (updateRes?.success)
-            router.push(`/game-play?gameCode=${gameCode}`);
-        }
-      } catch (err: unknown) {
-        if (!mountedRef.current) return;
-        if ((err as { name?: string })?.name === "AbortError") return; // ignore aborts
-        console.error("fetchGame error:", err);
-        setError((err as Error)?.message ?? "Failed to fetch game data. Please try again.");
-      } finally {
-        if (mountedRef.current) setLoading(false);
+        // Move to board – no flicker, no refresh
+        router.replace(`/game-play?gameCode=${encodeURIComponent(gameCode)}`);
+        return; // ← stop polling immediately after redirect
       }
-    };
 
-    const fetchAndPoll = async () => {
-      await fetchOnce();
-      const tick = async () => {
-        // stop polling on hidden tab to save bandwidth
-        if (typeof document !== "undefined" && document.hidden) {
-          pollTimer = window.setTimeout(tick, POLL_INTERVAL);
-          return;
-        }
-        await fetchOnce();
-        pollTimer = window.setTimeout(tick, POLL_INTERVAL);
-      };
-      pollTimer = window.setTimeout(tick, POLL_INTERVAL);
-    };
+      // Normal update (only when not full)
+      if (gameData.status === "RUNNING") {
+        router.replace(`/game-play?gameCode=${encodeURIComponent(gameCode)}`);
+        return;
+      }
 
-    fetchAndPoll();
+      if (gameData.status !== "PENDING") {
+        throw new Error(`Game ${gameCode} is not open.`);
+      }
 
-    return () => {
-      abort.abort();
-      if (pollTimer) clearTimeout(pollTimer);
-    };
+      // Only update state if something actually changed
+      if (JSON.stringify(gameData) !== JSON.stringify(game)) {
+        setGame(gameData);
+        setAvailableSymbols(computeAvailableSymbols(gameData));
+        setIsJoined(checkPlayerJoined(gameData));
+      }
+    } catch (err: unknown) {
+      if ((err as { name?: string })?.name === "AbortError") return;
+      setError((err as Error)?.message || "Failed to load game.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  }, [gameCode, computeAvailableSymbols, checkPlayerJoined, game, router]);
+  const startPolling = () => {
+    fetchOnce(); // first call immediately
+    const timer = setInterval(() => {
+      if (document.hidden) return; // don't poll when tab is in background
+      fetchOnce();
+    }, POLL_INTERVAL);
+    return timer;
+  };
 
+  const timer = startPolling();
+
+  return () => {
+    abort.abort();
+    clearInterval(timer);
+  };
+}, [gameCode, computeAvailableSymbols, checkPlayerJoined, router, handleGetGameByCode, stakeAmount, id, joinedPlayers, numberOfPlayers]); // added contract-related states to deps if needed, but since set only if changed, minimal re-runs
 
   const playersJoined =
     joinedPlayers ?? game?.players.length ?? 0;
   const maxPlayers =
     numberOfPlayers ?? game?.number_of_players ?? 0;
-
-  const formattedStake = useMemo(() => {
-    const amountInStx = stakeAmount / 1000000;
-    return amountInStx.toFixed(6).replace(/\.?0+$/, '');
-  }, [stakeAmount]);
 
   // copy handler (clipboard with fallback)
   const handleCopyLink = useCallback(async () => {
@@ -276,8 +248,8 @@ export default function GameWaiting() {
 
     try {
       // call on-chain join if available (this may prompt wallet)
-      if (contractId !== null) {
-        await handleJoinGamee(contractId, playerSymbol.id);
+      if (id !== null) {
+        await handleJoinGamee(id, playerSymbol.id);
       }
 
       // persist to API
@@ -302,7 +274,7 @@ export default function GameWaiting() {
     } finally {
       if (mountedRef.current) setActionLoading(false);
     }
-  }, [game, playerSymbol, availableSymbols, address, contractId, handleJoinGamee]);
+  }, [game, playerSymbol, availableSymbols, address, id, handleJoinGamee]);
 
   const handleLeaveGame = useCallback(async () => {
     if (!game)
@@ -393,7 +365,7 @@ export default function GameWaiting() {
                 : "Assemble Your Rivals..."}
             </p>
             <div className="w-full bg-[#003B3E]/50 h-2 rounded-full overflow-hidden shadow-inner">
-              <div 
+              <div
                 className="bg-gradient-to-r from-[#00F0FF] to-[#00FFAA] h-full transition-all duration-500 ease-out"
                 style={{ width: `${(playersJoined / maxPlayers) * 100}%` }}
               ></div>
@@ -401,9 +373,9 @@ export default function GameWaiting() {
             <p className="text-[#00F0FF] text-lg font-bold">
               Players Ready: {playersJoined}/{maxPlayers}
             </p>
-            <p className="text-[#00F0FF] text-sm font-bold">
+            {/* <p className="text-[#00F0FF] text-sm font-bold">
               Stake: {formattedStake} STX
-            </p>
+            </p> */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 justify-center">
               {Array.from({ length: maxPlayers }).map((_, index) => {
                 const player = game.players[index];
@@ -413,8 +385,8 @@ export default function GameWaiting() {
                     className="bg-[#010F10]/70 p-3 rounded-lg border border-[#00F0FF]/30 flex flex-col items-center justify-center shadow-md hover:shadow-[#00F0FF]/50 transition-shadow duration-300"
                   >
                     <span className="text-4xl mb-1 animate-bounce-slow">
-                      {player 
-                        ? symbols.find((s) => s.value === player.symbol)?.emoji 
+                      {player
+                        ? symbols.find((s) => s.value === player.symbol)?.emoji
                         : "❓"}
                     </span>
                     <p className="text-[#F0F7F7] text-xs font-semibold truncate max-w-[80px]">
