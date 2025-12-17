@@ -181,7 +181,7 @@ const AiBoard = ({
   const currentPlayer = players.find((p) => p.user_id === currentPlayerId);
   const isMyTurn = me?.user_id === currentPlayerId;
   const isAITurn =
-    currentPlayer?.username?.toLowerCase().includes("ai") ||
+    currentPlayer?.username?.toLowerCase().includes("ai_") ||
     currentPlayer?.username?.toLowerCase().includes("bot");
 
   const lastProcessed = useRef<number | null>(null);
@@ -233,7 +233,6 @@ const fetchUpdatedGame = useCallback(async () => {
       `/games/code/${game.code}`
     );
 
-    console.log("Fetched updated gameconst address = userData?.profile?.stxAddress?.mainnet || null; data:", res.data);
 
     if (res.success && res.data?.players) {
       setPlayers(res.data.players);
@@ -295,7 +294,7 @@ const fetchUpdatedGame = useCallback(async () => {
       setTimeout(END_TURN, 1000);
     } catch (err) {
       showToast("Purchase failed", "error");
-      console.log("BUY PROPERTY ERROR:", err);
+  
     }
   }, [currentPlayer, properties, game_properties, game.id, fetchUpdatedGame, actionLock, END_TURN, showToast]);
 
@@ -567,7 +566,7 @@ const fetchUpdatedGame = useCallback(async () => {
                     animate={{ opacity: [0.5, 1, 0.5], scale: [1, 1.05, 1] }}
                     transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
                   >
-                    AI {currentPlayer?.username} is playing…
+                   {currentPlayer?.username} is playing…
                   </motion.h2>
                   {buyPrompted && buyScore !== null && (
                     <p className="text-lg text-yellow-300 font-bold">

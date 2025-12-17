@@ -24,7 +24,7 @@ export default function GamePlayers({
   me,
 }: GamePlayersProps) {
   const {userData} = useStacks();
-  const address = userData?.addresses?.stx?.[0]?.address;
+    const address = userData?.addresses?.stx?.[0]?.address;
 
   const [showEmpire, setShowEmpire] = useState(false);
   const [showTrade, setShowTrade] = useState(false);
@@ -152,8 +152,8 @@ export default function GamePlayers({
         apiClient.get<ApiResponse>(`/game-trade-requests/my/${game.id}/player/${me.user_id}`),
         apiClient.get<ApiResponse>(`/game-trade-requests/incoming/${game.id}/player/${me.user_id}`),
       ]);
-      const initiated = _initiated?.data || [];
-      const incoming = _incoming?.data || [];
+      const initiated = _initiated.data?.data || [];
+      const incoming = _incoming.data?.data || [];
       setOpenTrades(initiated);
       setTradeRequests(incoming);
 
@@ -214,6 +214,13 @@ export default function GamePlayers({
     const targetPlayer = tradeModal.target;
     const username = (targetPlayer.username || "").toLowerCase();
     const isAI = username.includes("ai_") || username.includes("bot") || username.includes("computer");
+    console.log("=== TRADE DEBUG (Stacks version) ===");
+  console.log("me:", me);
+  console.log("me.user_id:", me?.user_id);
+  console.log("me.address:", me?.address);
+  console.log("My connected address:", address);
+  console.log("target:", tradeModal.target);
+  console.log("target.user_id:", tradeModal.target?.user_id);
 
     try {
       const payload = {
@@ -227,8 +234,10 @@ export default function GamePlayers({
         status: "pending",
       };
 
+      console.log("Creating trade with payload:", payload);
+
       const res = await apiClient.post<ApiResponse>("/game-trade-requests", payload);
-      if (res) {
+      if (res?.data?.success) {
         toast.success("Trade sent successfully!");
         setTradeModal({ open: false, target: null });
         resetTradeFields();
@@ -237,7 +246,7 @@ export default function GamePlayers({
         if (isAI) {
           const sentTrade = {
             ...payload,
-            id: res.data?.id || Date.now(),
+            id: res.data?.data?.id || Date.now(),
           };
 
           const favorability = calculateAiFavorability(sentTrade);
@@ -276,7 +285,7 @@ export default function GamePlayers({
           });
         }
       } else {
-        toast.error(res || "Failed to create trade");
+        toast.error(res?.data?.message || "Failed to create trade");
       }
     } catch (error: any) {
       toast.error(error?.response?.data?.message || "Failed to create trade");
@@ -356,8 +365,8 @@ export default function GamePlayers({
         user_id: me.user_id,
         property_id: id,
       });
-      if (res?.success) toast.success("Property developed successfully");
-      else toast.error(res?.data?.message ?? "Failed to develop property");
+      if (res?.data?.success) toast.success("Property developed successfully");
+      else toast.error(res.data?.message ?? "Failed to develop property");
     } catch (error: any) {
       toast.error(error?.message || "Failed to develop property");
     }
@@ -965,16 +974,16 @@ function TradeModal({
   toggleSelect,
   targetPlayerAddress
 }: any) {
+  if (!open) return null;
+
   const targetOwnedProps = useMemo(() => {
     const ownedGameProps = game_properties.filter(
-      (gp: GameProperty) => gp.address === targetPlayerAddress
+      (gp: any) => gp.address === targetPlayerAddress
     );
-    return properties.filter((p: Property) =>
-      ownedGameProps.some((gp: GameProperty) => gp.property_id === p.id)
+    return properties.filter((p: any) =>
+      ownedGameProps.some((gp: any) => gp.property_id === p.id)
     );
   }, [game_properties, properties, targetPlayerAddress]);
-
-  if (!open) return null;
 
   const PropertyCard = ({ prop, isSelected, onClick }: { prop: Property; isSelected: boolean; onClick: () => void }) => (
     <div
