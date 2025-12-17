@@ -40,6 +40,7 @@ export default function GameWaiting() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [actionLoading, setActionLoading] = useState<boolean>(false);
+  const [refetchKey, setRefetchKey] = useState(0);
 
   // Contract state – authoritative for player count & game start
   const [id, setId] = useState<number | null>(null);
@@ -128,11 +129,12 @@ export default function GameWaiting() {
 
         // 2. Game full on-chain → start immediately
         if (newJoined === newMax && newMax > 0) {
-          // Update backend status (fire-and-forget)
-          apiClient
-            .put<ApiResponse>(`/games/code/${gameCode}`, { status: "RUNNING" })
-            .catch(() => {});
-          router.replace(`/game-play?gameCode=${encodeURIComponent(gameCode)}`);
+          const updateRes = await apiClient.put<ApiResponse>(`/games/code/${gameCode}`, { status: "RUNNING" });
+          if (updateRes?.success) {
+            router.replace(`/game-play?gameCode=${encodeURIComponent(gameCode)}`);
+          } else {
+            throw new Error(updateRes?.message ?? "Failed to update game status");
+          }
           return;
         }
 
@@ -142,11 +144,24 @@ export default function GameWaiting() {
         );
         if (!res?.success || !res.data) throw new Error("Game not found");
 
-        const gameData = res.data;
+        const gameData = res.data as Game;
+
+        console.log("Polled game data:", gameData.status);
 
         // If backend already says RUNNING → redirect
         if (gameData.status === "RUNNING") {
           router.replace(`/game-play?gameCode=${encodeURIComponent(gameCode)}`);
+          return;
+        }
+
+        // 4. If API shows full players, update status and redirect (optimistic)
+        if (gameData.players.length === gameData.number_of_players) {
+          const updateRes = await apiClient.put<ApiResponse>(`/games/code/${gameCode}`, { status: "RUNNING" });
+          if (updateRes?.success) {
+            router.replace(`/game-play?gameCode=${encodeURIComponent(gameCode)}`);
+          } else {
+            throw new Error(updateRes?.message ?? "Failed to update game status");
+          }
           return;
         }
 
@@ -157,7 +172,10 @@ export default function GameWaiting() {
           setIsJoined(checkPlayerJoined(gameData));
         }
       } catch (err: unknown) {
-        if ((err as any)?.name === "AbortError") return;
+        if (typeof err === "object" && err !== null && "name" in err) {
+          const name = (err as { name?: unknown }).name;
+          if (typeof name === "string" && name === "AbortError") return;
+        }
         console.error("fetch error:", err);
         if (mountedRef.current)
           setError((err as Error)?.message || "Failed to load game");
@@ -176,6 +194,7 @@ export default function GameWaiting() {
       if (timer) clearInterval(timer);
     };
   }, [
+    game,
     gameCode,
     handleGetGameByCode,
     id,
@@ -184,6 +203,7 @@ export default function GameWaiting() {
     computeAvailableSymbols,
     checkPlayerJoined,
     router,
+    refetchKey,
   ]);
 
   // Counts
@@ -191,12 +211,23 @@ export default function GameWaiting() {
   const contractMax = numberOfPlayers ?? game?.number_of_players ?? 0;
   const apiJoined = game?.players.length ?? 0;
   const apiMax = game?.number_of_players ?? 0;
+  const displayJoined = Math.max(contractJoined, apiJoined);
 
   const showShare = contractJoined < contractMax;
 
   // Manual start (fallback for impatient players)
-  const handleManualStart = () => {
-    router.replace(`/game-play?gameCode=${encodeURIComponent(gameCode)}`);
+  const handleManualStart = async () => {
+    setError(null);
+    try {
+      const updateRes = await apiClient.put<ApiResponse>(`/games/code/${gameCode}`, { status: "RUNNING" });
+      if (updateRes?.success) {
+        router.replace(`/game-play?gameCode=${encodeURIComponent(gameCode)}`);
+      } else {
+        throw new Error(updateRes?.message ?? "Failed to update game status");
+      }
+    } catch (err: unknown) {
+      setError((err as Error)?.message || "Failed to start game");
+    }
   };
 
   // Copy link
@@ -247,7 +278,10 @@ export default function GameWaiting() {
 
       if (!res?.success) throw new Error(res?.message ?? "Join failed");
 
-      if (mountedRef.current) setIsJoined(true);
+      if (mountedRef.current) {
+        setIsJoined(true);
+        setRefetchKey((prev) => prev + 1); // Trigger refetch after join
+      }
     } catch (err: unknown) {
       if (mountedRef.current)
         setError((err as Error)?.message ?? "Failed to join game");
@@ -279,6 +313,7 @@ export default function GameWaiting() {
       if (mountedRef.current) {
         setIsJoined(false);
         setPlayerSymbol(null);
+        setRefetchKey((prev) => prev + 1); // Trigger refetch after leave
       }
     } catch (err: unknown) {
       if (mountedRef.current)
@@ -342,22 +377,22 @@ export default function GameWaiting() {
           </h2>
 
           <div className="text-center space-y-3 mb-6">
-            {/* <p className="text-[#869298] text-sm font-semibold">
-              {contractJoined === contractMax
+            <p className="text-[#869298] text-sm font-semibold">
+              {displayJoined === contractMax
                 ? "Full House! Starting..."
                 : "Assemble Your Rivals..."}
-            </p> */}
+            </p>
 
-            {/* <div className="w-full bg-[#003B3E]/50 h-2 rounded-full overflow-hidden shadow-inner">
+            <div className="w-full bg-[#003B3E]/50 h-2 rounded-full overflow-hidden shadow-inner">
               <div
                 className="bg-gradient-to-r from-[#00F0FF] to-[#00FFAA] h-full transition-all duration-500 ease-out"
-                style={{ width: `${(contractJoined / contractMax) * 100}%` }}
+                style={{ width: `${(displayJoined / contractMax) * 100}%` }}
               ></div>
-            </div> */}
+            </div>
 
-            {/* <p className="text-[#00F0FF] text-lg font-bold">
-              Players Ready: {contractJoined}/{contractMax}
-            </p> */}
+            <p className="text-[#00F0FF] text-lg font-bold">
+              Players Ready: {displayJoined}/{contractMax}
+            </p>
 
             {/* Sync lag indicator */}
             {apiJoined > contractJoined && (
