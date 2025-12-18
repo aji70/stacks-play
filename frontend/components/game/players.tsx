@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Game, GameProperty, Player, Property } from "@/types/game";
@@ -23,9 +24,9 @@ export default function GamePlayers({
   my_properties,
   me,
 }: GamePlayersProps) {
-   const {userData} = useStacks();
-    const address = userData?.addresses?.stx?.[0]?.address;
-  
+  const { userData } = useStacks();
+  const address = userData?.addresses?.stx?.[0]?.address;
+
   const [showEmpire, setShowEmpire] = useState(false);
   const [showTrade, setShowTrade] = useState(false);
   const [openTrades, setOpenTrades] = useState<any[]>([]);
@@ -39,7 +40,6 @@ export default function GamePlayers({
     trade: null,
   });
 
-  // trade form states
   const [offerProperties, setOfferProperties] = useState<number[]>([]);
   const [requestProperties, setRequestProperties] = useState<number[]>([]);
   const [offerCash, setOfferCash] = useState<number>(0);
@@ -103,11 +103,14 @@ export default function GamePlayers({
     if (!me || !game?.id) return;
     try {
       const [_initiated, _incoming] = await Promise.all([
-        apiClient.get<ApiResponse>(`/game-trade-requests/my/${game.id}/player/${me.user_id}`),
-        apiClient.get<ApiResponse>(`/game-trade-requests/incoming/${game.id}/player/${me.user_id}`),
+        apiClient.get<ApiResponse<any[]>>(`/game-trade-requests/my/${game.id}/player/${me.user_id}`),
+        apiClient.get<ApiResponse<any[]>>(`/game-trade-requests/incoming/${game.id}/player/${me.user_id}`),
       ]);
-      const initiated = _initiated.data?.data || []
-      const incoming = _incoming.data?.data || []
+
+      // Fixed: .data is the array, not .data.data
+      const initiated = _initiated.data || [];
+      const incoming = _incoming.data || [];
+
       setOpenTrades(initiated);
       setTradeRequests(incoming);
     } catch (err) {
@@ -122,12 +125,10 @@ export default function GamePlayers({
     let interval: NodeJS.Timeout;
 
     const startPolling = async () => {
-      // Initial load
       await fetchTrades();
 
-      // Poll every 5 seconds
       interval = setInterval(async () => {
-        if (isFetching) return; // avoid overlap
+        if (isFetching) return;
         isFetching = true;
         try {
           await fetchTrades();
@@ -139,12 +140,9 @@ export default function GamePlayers({
 
     startPolling();
 
-    // cleanup on unmount
     return () => clearInterval(interval);
   }, [fetchTrades, me, game?.id]);
 
-
-  // Create new trade
   const handleCreateTrade = async () => {
     if (!me || !tradeModal.target) return;
 
@@ -161,21 +159,20 @@ export default function GamePlayers({
       };
 
       const res = await apiClient.post<ApiResponse>("/game-trade-requests", payload);
-      if (res?.data?.success) {
+      if (res.success) {
         toast.success("Trade created successfully");
-        setOpenTrades((prev) => [...prev, res.data]);
         setTradeModal({ open: false, target: null });
         resetTradeFields();
+        fetchTrades();
         return;
       }
-      toast.error(res?.data?.message || "Failed to create trade");
+      toast.error(res.message || "Failed to create trade");
     } catch (error: any) {
       console.error(error);
-      toast.error(error?.response?.data?.message || "Failed to create trade");
+      toast.error(error?.message || "Failed to create trade");
     }
   };
 
-  // Accept, decline, or counter
   const handleTradeAction = async (id: number, action: "accepted" | "declined" | "counter") => {
     try {
       if (action === "counter") {
@@ -183,8 +180,11 @@ export default function GamePlayers({
         if (trade) setCounterModal({ open: true, trade });
         return;
       }
-      const res = await apiClient.post<ApiResponse>(`/game-trade-requests/${action == 'accepted' ? 'accept' : 'decline'}`, { id });
-      if (res?.data?.success) {
+      const res = await apiClient.post<ApiResponse>(
+        `/game-trade-requests/${action === "accepted" ? "accept" : "decline"}`,
+        { id }
+      );
+      if (res.success) {
         toast.success(`Trade ${action}`);
         fetchTrades();
         return;
@@ -196,7 +196,6 @@ export default function GamePlayers({
     }
   };
 
-  // Submit counter trade update
   const submitCounterTrade = async () => {
     if (!me || !counterModal.trade) return;
     try {
@@ -208,7 +207,7 @@ export default function GamePlayers({
         status: "counter",
       };
       const res = await apiClient.put<ApiResponse>(`/game-trade-requests/${counterModal.trade.id}`, payload);
-      if (res?.data?.success) {
+      if (res.success) {
         toast.success("Counter offer sent");
         setCounterModal({ open: false, trade: null });
         resetTradeFields();
@@ -243,11 +242,11 @@ export default function GamePlayers({
       };
 
       const res = await apiClient.post<ApiResponse>("/game-properties/development", payload);
-      if (res?.data?.success) {
+      if (res.success) {
         toast.success("Property development successfully");
         return;
       }
-      toast.error(res.data?.message ?? "Failed to develop property.");
+      toast.error(res.message ?? "Failed to develop property.");
     } catch (error: any) {
       console.error(error);
       toast.error(error?.message || "Failed to develop property..");
@@ -265,11 +264,11 @@ export default function GamePlayers({
       };
 
       const res = await apiClient.post<ApiResponse>("/game-properties/downgrade", payload);
-      if (res?.data?.success) {
+      if (res.success) {
         toast.success("Property downgraded successfully");
         return;
       }
-      toast.error(res.data?.message ?? "Failed to downgrade property.");
+      toast.error(res.message ?? "Failed to downgrade property.");
     } catch (error: any) {
       console.error(error);
       toast.error(error?.message || "Failed to downgrade property..");
@@ -287,11 +286,11 @@ export default function GamePlayers({
       };
 
       const res = await apiClient.post<ApiResponse>("/game-properties/mortgage", payload);
-      if (res?.data?.success) {
+      if (res.success) {
         toast.success("Property mortgaged successfully");
         return;
       }
-      toast.error(res.data?.message ?? "Failed to mortgage property.");
+      toast.error(res.message ?? "Failed to mortgage property.");
     } catch (error: any) {
       console.error(error);
       toast.error(error?.message || "Failed to mortgage property..");
@@ -309,11 +308,11 @@ export default function GamePlayers({
       };
 
       const res = await apiClient.post<ApiResponse>("/game-properties/unmortgage", payload);
-      if (res?.data?.success) {
+      if (res.success) {
         toast.success("Property unmortgaged successfully");
         return;
       }
-      toast.error(res.data?.message ?? "Failed to unmortgage property.");
+      toast.error(res.message ?? "Failed to unmortgage property.");
     } catch (error: any) {
       console.error(error);
       toast.error(error?.message || "Failed to unmortgage property..");
@@ -659,7 +658,6 @@ export default function GamePlayers({
 }
 
 /* --- Shared TradeModal --- */
-
 function TradeModal({
   open,
   title,
@@ -679,21 +677,18 @@ function TradeModal({
   toggleSelect,
   targetPlayerAddress
 }: any) {
-  if (!open) return null;
-
+  // ← Move useMemo BEFORE the early return
   const targetOwnedProps = useMemo(() => {
-    const validTypes = ["land", "railway", "utility"];
-    // Filter game_properties by player ownership and valid type
     const ownedGameProps = game_properties.filter(
-      (gp: any) =>
-        gp.address == targetPlayerAddress
+      (gp: any) => gp.address === targetPlayerAddress
     );
 
-    // Map to property details
     return properties.filter((p: any) =>
       ownedGameProps.some((gp: any) => gp.property_id === p.id)
     );
   }, [game_properties, properties, targetPlayerAddress]);
+
+  if (!open) return null;
 
   const PropertyCard = ({ prop, isSelected, onClick }: { prop: Property; isSelected: boolean; onClick: () => void }) => (
     <div
@@ -711,6 +706,7 @@ function TradeModal({
     </div>
   );
 
+  
   return (
     <motion.div
       initial={{ opacity: 0 }}

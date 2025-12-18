@@ -231,11 +231,12 @@ const GameBoard = ({
     if (!me?.user_id) return;
 
     try {
-      const res = await apiClient.post<ApiResponse>(
+      const res = await apiClient.post<ApiResponse<{ canRoll: boolean }>>(
         "/game-players/can-roll",
         { user_id: me.user_id, game_id: game.id }
       );
-      const allowed = Boolean(res?.data?.canRoll);
+
+      const allowed = Boolean(res.data?.canRoll);
       setCanRoll(allowed);
 
       if (allowed) toast.success("🎲 It's your turn — roll the dice!");
@@ -411,12 +412,12 @@ const GameBoard = ({
     setIsRolling(true);
 
     try {
-      const res = await apiClient.post<ApiResponse>(
+      const res = await apiClient.post<ApiResponse<{ canRoll: boolean }>>(
         "/game-players/can-roll",
         { user_id: me?.user_id, game_id: game.id }
       );
 
-      const allowed = Boolean(res?.data?.canRoll);
+      const allowed = Boolean(res.data?.canRoll);
       if (!allowed) {
         toast.error("⏳ Not your turn! Wait for your turn to roll.");
         setIsRolling(false);
