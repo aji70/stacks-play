@@ -231,18 +231,21 @@ const MobileGameLayout = ({
   }, [actionLock]);
 
   const unlockAction = useCallback(() => setActionLock(null), []);
+// Inside MobileGameLayout.tsx – replace your fetchUpdatedGame
 
-  const fetchUpdatedGame = useCallback(async () => {
-    try {
-      const res = await apiClient.get<ApiResponse>(`/games/code/${game.code}`);
-      if (res?.data?.success && res.data.data?.players) {
-        setPlayers(res.data.data.players);
-      }
-    } catch (err) {
-      console.error("Sync failed:", err);
+const fetchUpdatedGame = useCallback(async () => {
+  try {
+    // Tell TypeScript the response body is ApiResponse<Game>
+    const res = await apiClient.get<ApiResponse<Game>>(`/games/code/${game.code}`);
+
+    // res is now { success: boolean; data?: Game; message?: string }
+    if (res.success && res.data?.players) {
+      setPlayers(res.data.players);
     }
-  }, [game.code]);
-
+  } catch (err) {
+    console.error("Sync failed:", err);
+  }
+}, [game.code]);
   useEffect(() => {
     const interval = setInterval(fetchUpdatedGame, 8000);
     return () => clearInterval(interval);

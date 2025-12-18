@@ -147,7 +147,6 @@ export default function GamePlayPage() {
               game={game}
               properties={properties}
               game_properties={game_properties}
-              my_properties={my_properties}
               me={me}
             />
           )}

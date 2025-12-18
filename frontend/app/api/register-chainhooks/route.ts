@@ -9,75 +9,66 @@ if (!HIRO_API_KEY) {
 }
 
 const client = new ChainhooksClient({
-  baseUrl: CHAINHOOKS_BASE_URL.testnet, // Change to .mainnet when ready
+  baseUrl: CHAINHOOKS_BASE_URL.testnet, // Use .mainnet for production
   apiKey: HIRO_API_KEY,
 });
 
 export async function POST() {
   try {
-    // Optional: Clean up old tycoon hooks
+    // Optional: Clean up old tycoon-related chainhooks
     const existing = await client.getChainhooks();
     for (const hook of existing.results) {
       if (hook.definition.name.startsWith('tycoon-')) {
+        console.log(`Deleting old chainhook: ${hook.definition.name} (${hook.uuid})`);
         await client.deleteChainhook(hook.uuid);
       }
     }
 
-    // Register hooks
+    // Common action for all hooks
+    const action = {
+      type: 'http_post' as const,
+      url: `${process.env.NEXT_PUBLIC_SITE_URL}/api/webhook/game-event`,
+    };
+
+    // Register tycoon-game-created
     await client.registerChainhook({
       name: 'tycoon-game-created',
+      version: "1",
       chain: 'stacks',
       network: 'testnet',
-      predicate: {
-        contract_calls: {
-          contract_id: 'SP81CZF1YK81CPAMS6PRS3GJSKK35MGZ2R9SNESA.tyc',
-          function_name: 'create-game',
-        },
+      filters: {
+        events: [],
       },
-      action: {
-        type: 'http-post',
-        url: `${process.env.NEXT_PUBLIC_SITE_URL}/api/webhook/game-event`,
-      },
+      action,
     });
 
+    // Register tycoon-ai-game-created
     await client.registerChainhook({
       name: 'tycoon-ai-game-created',
+      version: "1",
       chain: 'stacks',
       network: 'testnet',
-      predicate: {
-        contract_calls: {
-          contract_id: 'SP81CZF1YK81CPAMS6PRS3GJSKK35MGZ2R9SNESA.tyc',
-          function_name: 'create-ai-game',
-        },
+      filters: {
+        events: [],
       },
-      action: {
-        type: 'http-post',
-        url: `${process.env.NEXT_PUBLIC_SITE_URL}/api/webhook/game-event`,
-      },
+      action,
     });
 
+    // Register tycoon-player-joined
     await client.registerChainhook({
       name: 'tycoon-player-joined',
+      version: "1",
       chain: 'stacks',
       network: 'testnet',
-      predicate: {
-        contract_calls: {
-          contract_id: 'SP81CZF1YK81CPAMS6PRS3GJSKK35MGZ2R9SNESA.tyc',
-          function_name: 'join-game',
-        },
+      filters: {
+        events: [],
       },
-      action: {
-        type: 'http-post',
-        url: `${process.env.NEXT_PUBLIC_SITE_URL}/api/webhook/game-event`,
-      },
+      action,
     });
 
-    return NextResponse.json({ success: true, message: 'Chainhooks registered successfully!' });
-  } catch (error: any) {
-    console.error('Chainhook registration failed:', error);
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ message: 'Chainhooks registered successfully' });
+  } catch (error) {
+    console.error('Error registering chainhooks:', error);
+    return NextResponse.json({ error: 'Failed to register chainhooks' }, { status: 500 });
   }
 }
