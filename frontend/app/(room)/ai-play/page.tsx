@@ -3,6 +3,9 @@
 import AiBoard from "@/components/game/ai-board";
 import GameRoom from "@/components/game/game-room";
 import GamePlayers from "@/components/game/ai-player";
+import MobileGameLayout from "@/components/game/MobileGameLayout";
+import MobilePlayerLayout from "@/components/game/MobilePlayerLayout";
+
 import { apiClient } from "@/lib/api";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -11,8 +14,6 @@ import { useStacks } from "@/hooks/use-stacks";
 import { useQuery } from "@tanstack/react-query";
 import { ApiResponse } from "@/types/api";
 import { useMediaQuery } from "@/components/useMediaQuery";
-import MobileGameLayout from "@/components/game/MobileGameLayout";
-import MobilePlayerLayout from "@/components/game/MobilePlayerLayout";
 
 export default function GamePlayPage() {
   const searchParams = useSearchParams();
@@ -27,7 +28,8 @@ export default function GamePlayPage() {
     const code = searchParams.get("gameCode") || localStorage.getItem("gameCode");
 
     if (code && code.length === 6 && code !== gameCode) {
-      setTimeout(() => setGameCode(code), 0); // safe async state update
+      setTimeout(() => setGameCode(code), 0);
+      localStorage.setItem("gameCode", code);
     }
   }, [searchParams, gameCode]);
 
@@ -38,18 +40,9 @@ export default function GamePlayPage() {
   } = useQuery<Game | null>({
     queryKey: ["game", gameCode],
     queryFn: async () => {
-      console.log("FETCHING GAME WITH CODE:", gameCode);
-
+      if (!gameCode) return null;
       const res = await apiClient.get<ApiResponse<Game>>(`/games/code/${gameCode}`);
-
-      console.log("GAME RAW RESPONSE:", res);
-
-      if (!res?.success || !res.data) {
-        console.log("GAME LOAD FAILED");
-        return null;
-      }
-
-      console.log("GAME PARSED DATA:", res.data);
+      if (!res?.success || !res.data) return null;
       return res.data;
     },
     enabled: !!gameCode,
@@ -58,9 +51,11 @@ export default function GamePlayPage() {
 
   const me = useMemo(() => {
     if (!game?.players || !address) return null;
-    return game.players.find(
-      (pl: Player) => pl.address?.toLowerCase() === address.toLowerCase()
-    ) || null;
+    return (
+      game.players.find(
+        (pl: Player) => pl.address?.toLowerCase() === address.toLowerCase()
+      ) || null
+    );
   }, [game, address]);
 
   const {
@@ -70,7 +65,6 @@ export default function GamePlayPage() {
     queryKey: ["properties"],
     queryFn: async (): Promise<Property[]> => {
       const res = await apiClient.get<ApiResponse<Property[]>>("/properties");
-      console.log("PROPERTIES RESPONSE:", res);
       return res?.success && res.data ? res.data : [];
     },
   });
@@ -81,17 +75,10 @@ export default function GamePlayPage() {
   } = useQuery<GameProperty[]>({
     queryKey: ["game_properties", game?.id],
     queryFn: async (): Promise<GameProperty[]> => {
-      if (!game?.id) {
-        console.log("NO GAME ID YET");
-        return [];
-      }
-
+      if (!game?.id) return [];
       const res = await apiClient.get<ApiResponse<GameProperty[]>>(
         `/game-properties/game/${game.id}`
       );
-
-      console.log("GAME PROPERTIES RESPONSE:", res);
-
       return res?.success && res.data ? res.data : [];
     },
     enabled: !!game?.id,
@@ -110,39 +97,42 @@ export default function GamePlayPage() {
       .sort((a, b) => a.id - b.id);
   }, [game_properties, properties, address]);
 
-  const [activeTab, setActiveTab] = useState<'board' | 'players'>('board');
+  const [activeTab, setActiveTab] = useState<"board" | "players">("board");
 
-  if (gameLoading) {
+  if (gameLoading || propertiesLoading) {
     return (
-      <div className="w-full min-h-screen flex items-center justify-center text-lg font-medium text-white">
-        Loading game...
+      <div className="w-full h-screen bg-[#010F10] flex flex-col items-center justify-center gap-6 text-cyan-300">
+        <div className="w-16 h-16 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-2xl font-bold tracking-wider">Loading Game...</p>
       </div>
     );
   }
 
   if (gameError || !game) {
     return (
-      <div className="w-full min-h-screen flex items-center justify-center text-lg font-medium text-white">
-        Failed to load game
+      <div className="w-full h-screen bg-[#010F10] flex flex-col items-center justify-center text-center px-8">
+        <h2 className="text-3xl font-bold text-red-400 mb-4">Game Not Found</h2>
+        <p className="text-gray-300 text-lg">
+          Invalid or expired game code. Please check and try again.
+        </p>
       </div>
     );
   }
 
-  console.log("is mobile?? ", isMobile, "game, ", game);
-
+  // Mobile View
   if (isMobile) {
     return (
-      <main className="w-full h-screen flex flex-col overflow-hidden">
+      <main className="w-full h-screen flex flex-col overflow-hidden bg-[#010F10]">
+        {/* Main Content */}
         <div className="flex-1 w-full overflow-hidden">
-          {activeTab === 'board' && (
+          {activeTab === "board" ? (
             <MobileGameLayout
               game={game}
               properties={properties}
               game_properties={game_properties}
               me={me}
             />
-          )}
-          {activeTab === 'players' && (
+          ) : (
             <MobilePlayerLayout
               game={game}
               properties={properties}
@@ -152,35 +142,51 @@ export default function GamePlayPage() {
             />
           )}
         </div>
-        <nav className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-cyan-500 flex justify-around items-center h-16 z-50">
-          <button
-            onClick={() => setActiveTab('board')}
-            className={`flex-1 py-2 text-center font-bold ${activeTab === 'board' ? 'text-cyan-300 bg-cyan-900/40' : 'text-white'}`}
-          >
-            Board
-          </button>
-          <button
-            onClick={() => setActiveTab('players')}
-            className={`flex-1 py-2 text-center font-bold ${activeTab === 'players' ? 'text-cyan-300 bg-cyan-900/40' : 'text-white'}`}
-          >
-            Players
-          </button>
-        </nav>
+
+        {/* Cool Animated Bottom Tab Bar with Emojis */}
+<nav className="fixed bottom-0 left-0 right-0 h-20 pb-safe bg-gradient-to-t from-[#010F10]/95 to-[#010F10]/80 backdrop-blur-xl border-t-2 border-cyan-500/50 flex items-center justify-around z-50 shadow-2xl">
+  <button
+    onClick={() => setActiveTab("board")}
+    className={`flex flex-col items-center justify-center flex-1 h-full transition-all duration-300 ${
+      activeTab === "board"
+        ? "text-cyan-300 scale-110 drop-shadow-lg"
+        : "text-gray-500 scale-100"
+    }`}
+  >
+    <span className="text-4xl mb-1">🎲</span>
+    <span className="text-xs font-bold tracking-wider">Board</span>
+  </button>
+
+  <button
+    onClick={() => setActiveTab("players")}
+    className={`flex flex-col items-center justify-center flex-1 h-full transition-all duration-300 ${
+      activeTab === "players"
+        ? "text-cyan-300 scale-110 drop-shadow-lg"
+        : "text-gray-500 scale-100"
+    }`}
+  >
+    <span className="text-4xl mb-1">👥</span>
+    <span className="text-xs font-bold tracking-wider">Players</span>
+  </button>
+</nav>
       </main>
     );
   }
 
+  // Desktop View
   return (
-    <main className="w-full h-screen overflow-x-hidden relative flex flex-row lg:gap-2">
-      <GamePlayers
-        game={game}
-        properties={properties}
-        game_properties={game_properties}
-        my_properties={my_properties}
-        me={me}
-      />
+    <main className="w-full h-screen overflow-hidden relative flex flex-row bg-[#010F10] lg:gap-4 p-4">
+      <div className="hidden lg:block w-80 flex-shrink-0">
+        <GamePlayers
+          game={game}
+          properties={properties}
+          game_properties={game_properties}
+          my_properties={my_properties}
+          me={me}
+        />
+      </div>
 
-      <div className="lg:flex-1 w-full">
+      <div className="flex-1 min-w-0">
         <AiBoard
           game={game}
           properties={properties}
@@ -188,7 +194,10 @@ export default function GamePlayPage() {
           me={me}
         />
       </div>
-      <GameRoom />
+
+      <div className="hidden lg:block w-80 flex-shrink-0">
+        <GameRoom />
+      </div>
     </main>
   );
 }
