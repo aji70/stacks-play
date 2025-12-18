@@ -1,20 +1,21 @@
-// pages/api/register-chainhooks.ts
+// app/api/register-chainhooks/route.ts
 import { ChainhooksClient, CHAINHOOKS_BASE_URL } from '@hirosystems/chainhooks-client';
-import type { NextApiRequest, NextApiResponse } from 'next';
+import { NextResponse } from 'next/server';
 
-const HIRO_API_KEY = process.env.HIRO_API_KEY!; // We'll add this to .env next
+const HIRO_API_KEY = process.env.HIRO_API_KEY;
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') return res.status(405).end();
+if (!HIRO_API_KEY) {
+  throw new Error('HIRO_API_KEY is required in .env.local');
+}
 
-  const client = new ChainhooksClient({
-    baseUrl: CHAINHOOKS_BASE_URL.testnet, // Change to mainnet later
-    apiKey: HIRO_API_KEY,
-  });
-  
+const client = new ChainhooksClient({
+  baseUrl: CHAINHOOKS_BASE_URL.testnet, // Change to .mainnet when ready
+  apiKey: HIRO_API_KEY,
+});
 
+export async function POST() {
   try {
-    // Delete old hooks if any (optional cleanup)
+    // Optional: Clean up old tycoon hooks
     const existing = await client.getChainhooks();
     for (const hook of existing.results) {
       if (hook.definition.name.startsWith('tycoon-')) {
@@ -22,7 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    // 1. Hook: Someone creates a game
+    // Register hooks
     await client.registerChainhook({
       name: 'tycoon-game-created',
       chain: 'stacks',
@@ -39,7 +40,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       },
     });
 
-    // 2. Hook: Someone creates an AI game
     await client.registerChainhook({
       name: 'tycoon-ai-game-created',
       chain: 'stacks',
@@ -56,7 +56,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       },
     });
 
-    // 3. Hook: Someone joins a game
     await client.registerChainhook({
       name: 'tycoon-player-joined',
       chain: 'stacks',
@@ -73,9 +72,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       },
     });
 
-    res.status(200).json({ success: true, message: 'Chainhooks registered!' });
+    return NextResponse.json({ success: true, message: 'Chainhooks registered successfully!' });
   } catch (error: any) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
+    console.error('Chainhook registration failed:', error);
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    );
   }
 }

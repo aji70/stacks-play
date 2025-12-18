@@ -1,22 +1,16 @@
-// pages/api/webhook/game-event.ts
-import type { NextApiRequest, NextApiResponse } from 'next';
+// app/api/webhook/game-event/route.ts
+import { NextResponse } from 'next/server';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') return res.status(405).end();
+export async function POST(request: Request) {
+  try {
+    const payload = await request.json();
+    console.log('Chainhook event received:', payload);
 
-  const payload = req.body;
+    // Here you can later: update DB, revalidate pages, send WebSocket, etc.
 
-  // Simple security: check if it's really from Hiro
-  // Optional: verify signature in production
-
-  console.log('Chainhook event received:', payload);
-
-  // Here you can:
-  // - Update a database
-  // - Invalidate Next.js cache (revalidatePath)
-  // - Send WebSocket message to clients
-  // - Trigger notifications
-
-  // For now, just acknowledge
-  res.status(200).json({ received: true });
+    return NextResponse.json({ received: true });
+  } catch (error) {
+    console.error('Webhook error:', error);
+    return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
+  }
 }
