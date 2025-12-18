@@ -15,27 +15,34 @@ export default function GamePlayPage() {
   const searchParams = useSearchParams();
   const [gameCode, setGameCode] = useState<string>("");
 
-  const {userData} = useStacks();
-  const address = userData?.addresses.stx[0].address || "";
+  const { userData } = useStacks();
+  const address = userData?.addresses?.stx?.[0]?.address ?? "";
 
-useEffect(() => {
-  const code = searchParams.get("gameCode") || localStorage.getItem("gameCode");
+  useEffect(() => {
+    const code = searchParams.get("gameCode") || localStorage.getItem("gameCode");
 
-  if (code && code.length === 6 && code !== gameCode) {
-    setTimeout(() => setGameCode(code), 0); // safe async state update
-  }
-}, [searchParams, gameCode]);
+    if (code && code.length === 6 && code !== gameCode) {
+      setTimeout(() => setGameCode(code), 0); // safe async state update
+    }
+  }, [searchParams, gameCode]);
 
   const {
     data: game,
     isLoading: gameLoading,
     isError: gameError,
-  } = useQuery<Game>({
+  } = useQuery<Game | null>({
     queryKey: ["game", gameCode],
     queryFn: async () => {
       if (!gameCode) throw new Error("No game code found");
-      const res = await apiClient.get<ApiResponse>(`/games/code/${gameCode}`);
-      return res.success ? res.data : null;
+
+      const res = await apiClient.get<ApiResponse<Game>>(`/games/code/${gameCode}`);
+
+      if (!res.success || !res.data) {
+        console.warn("Failed to load game:", res);
+        return null;
+      }
+
+      return res.data;
     },
     enabled: !!gameCode,
     refetchInterval: 5000,
@@ -51,27 +58,27 @@ useEffect(() => {
   const {
     data: properties = [],
     isLoading: propertiesLoading,
-    isError: propertiesError,
   } = useQuery<Property[]>({
     queryKey: ["properties"],
-    queryFn: async () => {
-      const res = await apiClient.get<ApiResponse>("/properties");
-      return res.success ? res.data : [];
-    }
+    queryFn: async (): Promise<Property[]> => {
+      const res = await apiClient.get<ApiResponse<Property[]>>("/properties");
+      return res.success && res.data ? res.data : [];
+    },
   });
 
   const {
     data: game_properties = [],
     isLoading: gamePropertiesLoading,
-    isError: gamePropertiesError,
   } = useQuery<GameProperty[]>({
     queryKey: ["game_properties", game?.id],
-    queryFn: async () => {
+    queryFn: async (): Promise<GameProperty[]> => {
       if (!game?.id) return [];
-      const res = await apiClient.get<ApiResponse>(
+
+      const res = await apiClient.get<ApiResponse<GameProperty[]>>(
         `/game-properties/game/${game.id}`
       );
-      return res.success ? res.data : [];
+
+      return res.success && res.data ? res.data : [];
     },
     enabled: !!game?.id,
     refetchInterval: 15000,
@@ -97,7 +104,7 @@ useEffect(() => {
     );
   }
 
-  if (gameError) {
+  if (gameError || !game) {
     return (
       <div className="w-full min-h-screen flex items-center justify-center text-lg font-medium text-white">
         Failed to load game
@@ -105,8 +112,7 @@ useEffect(() => {
     );
   }
 
-
-  return game && !propertiesLoading && !gamePropertiesLoading ? (
+  return (
     <main className="w-full h-screen overflow-x-hidden relative flex flex-row lg:gap-2">
       <GamePlayers
         game={game}
@@ -125,9 +131,8 @@ useEffect(() => {
           me={me}
         />
       </div>
+
       <GameRoom />
     </main>
-  ) : (
-    <></>
   );
 }
