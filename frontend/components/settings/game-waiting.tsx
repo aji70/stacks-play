@@ -183,7 +183,7 @@ export default function GameWaiting() {
     return () => {
       if (pollTimer) clearInterval(pollTimer);
     };
-  }, [gameCode, game, handleGetGameByCode, router]);
+  }, [gameCode, game, handleGetGameByCode, router, checkPlayerJoined, computeAvailableSymbols]);
 
   // Display counts from contract (authoritative)
   const playersJoined = contractJoinedPlayers ?? game?.players.length ?? 0;
