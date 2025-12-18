@@ -122,7 +122,7 @@ function useSafeState<S>(initial: S) {
 }
 
 /* ============================================
-   GAME BOARD COMPONENT
+   DICE FACE
    ============================================ */
 
 const DiceFace = ({ value }: { value: number }) => {
@@ -152,6 +152,10 @@ const DiceFace = ({ value }: { value: number }) => {
   );
 };
 
+/* ============================================
+   GAME BOARD COMPONENT
+   ============================================ */
+
 const GameBoard = ({
   game,
   properties,
@@ -159,7 +163,7 @@ const GameBoard = ({
   my_properties,
   me,
 }: GameProps) => {
-  const {userData} = useStacks();
+  const { userData } = useStacks();
   const address = userData?.addresses.stx[0].address || "";
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -204,13 +208,14 @@ const GameBoard = ({
   /* ---------- Fetch Updated Game ---------- */
   const fetchUpdatedGame = useCallback(async () => {
     try {
-      const res = await apiClient.get<ApiResponse>(`/games/code/${game.code}`)
-      if (res?.data?.success) {
-        const gameData = res.data?.data;
-        if (gameData && Array.isArray((gameData as any).players)) {
+      const res = await apiClient.get<ApiResponse<Game>>(`/games/code/${game.code}`);
+
+      if (res.success) {
+        const gameData = res.data;
+        if (gameData && Array.isArray(gameData.players)) {
           setPlayers((prev) => {
-            const changed = JSON.stringify(prev) !== JSON.stringify((gameData as any).players);
-            return changed ? (gameData as any).players : prev;
+            const changed = JSON.stringify(prev) !== JSON.stringify(gameData.players);
+            return changed ? gameData.players : prev;
           });
         }
         return gameData;
@@ -230,7 +235,7 @@ const GameBoard = ({
         "/game-players/can-roll",
         { user_id: me.user_id, game_id: game.id }
       );
-      const allowed = Boolean(res?.data?.data?.canRoll);
+      const allowed = Boolean(res?.data?.canRoll);
       setCanRoll(allowed);
 
       if (allowed) toast.success("🎲 It's your turn — roll the dice!");
@@ -257,7 +262,6 @@ const GameBoard = ({
   useEffect(() => {
     if (!stableProperties.length || !me?.position || !game?.players) return;
 
-    // Only process if position has changed
     if (me.position === lastProcessedPosition.current) return;
 
     lastProcessedPosition.current = me.position;
@@ -288,10 +292,6 @@ const GameBoard = ({
       !game_property
     ) {
       toast("💰 You can buy this property!", { icon: "🏠" });
-    }
-
-    if (!isMyTurn || roll === null || meInGame?.rolls === 0) {
-      // Reset if needed
     }
   }, [
     me?.position,
@@ -357,14 +357,13 @@ const GameBoard = ({
         }
       );
 
-      if (res?.data?.success) {
-
+      if (res.success) {
         toast.success(`🏠 You bought ${currentProperty.name}!`);
         await fetchUpdatedGame();
         forceRefetch();
+      } else {
+        toast.error(res.message || "Failed to buy property.");
       }
-      toast.error(res.data?.message || "Failed to buy property.");
-      return;
     } catch (err) {
       console.error("BUY_PROPERTY error:", err);
       toast.error("Unable to complete property purchase.");
@@ -382,7 +381,7 @@ const GameBoard = ({
           game_id: game.id,
         });
 
-        if (!res?.data?.success) throw new Error(res?.data?.message || "Server rejected turn end.");
+        if (!res.success) throw new Error(res.message || "Server rejected turn end.");
 
         const updatedGame = await fetchUpdatedGame();
         if (updatedGame?.players) {
@@ -395,7 +394,7 @@ const GameBoard = ({
         forceRefetch();
       } catch (err: any) {
         console.error("END_TURN error:", err);
-        toast.error(err?.response?.data?.message || "Failed to end turn.");
+        toast.error(err?.message || "Failed to end turn.");
         forceRefetch();
       } finally {
         unlockAction();
@@ -417,7 +416,7 @@ const GameBoard = ({
         { user_id: me?.user_id, game_id: game.id }
       );
 
-      const allowed = Boolean(res?.data?.data?.canRoll);
+      const allowed = Boolean(res?.data?.canRoll);
       if (!allowed) {
         toast.error("⏳ Not your turn! Wait for your turn to roll.");
         setIsRolling(false);
@@ -425,7 +424,6 @@ const GameBoard = ({
         return;
       }
 
-      // Animation delay
       setTimeout(async () => {
         const value = getDiceValues();
 
@@ -445,7 +443,7 @@ const GameBoard = ({
             }
           );
 
-          if (!updateResp?.data?.success) toast.error("Unable to move from current position");
+          if (!updateResp.success) toast.error("Unable to move from current position");
 
           const updatedGame = await fetchUpdatedGame();
           if (updatedGame?.players) {
@@ -499,17 +497,16 @@ const GameBoard = ({
     return map;
   }, [players]);
 
-
   const propertyOwner = (property_id: number) => {
     const gp = game_properties.find((gp) => gp.property_id === property_id);
     if (gp) {
-      const player = players.find((p) => p.address === gp.address)
+      const player = players.find((p) => p.address === gp.address);
       if (player) {
-        return player.username
+        return player.username;
       }
     }
     return null;
-  }
+  };
 
   const getGamePropertyForSquare = useCallback((property_id: number): GameProperty | null => {
     return game_properties.find((gp) => gp.property_id === property_id) || null;
@@ -526,7 +523,6 @@ const GameBoard = ({
   /* ---------- Activity Log Helpers ---------- */
   const logRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    // auto-scroll to bottom when history changes
     if (!logRef.current) return;
     logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [game.history]);
@@ -606,16 +602,14 @@ const GameBoard = ({
 
                     return (
                       <div className="flex gap-4 flex-wrap justify-center">
-                        {
-                          currentAction && ["land", "railway", "utility"].includes(currentAction) && !currentGameProperty && currentProperty && (
-                            <button
-                              onClick={BUY_PROPERTY}
-                              className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold rounded-full hover:from-green-600 hover:to-emerald-700 transform hover:scale-110 active:scale-95 transition-all shadow-lg"
-                            >
-                              Buy for ${currentProperty?.price}
-                            </button>
-                          )
-                        }
+                        {currentAction && ["land", "railway", "utility"].includes(currentAction) && !currentGameProperty && currentProperty && (
+                          <button
+                            onClick={BUY_PROPERTY}
+                            className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold rounded-full hover:from-green-600 hover:to-emerald-700 transform hover:scale-110 active:scale-95 transition-all shadow-lg"
+                          >
+                            Buy for ${currentProperty?.price}
+                          </button>
+                        )}
                         <button
                           onClick={() => END_TURN(me?.user_id)}
                           disabled={actionLock === "ROLL"}
@@ -682,15 +676,12 @@ const GameBoard = ({
                         }`}
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {/* Card Back Pattern */}
-                      <div className ="absolute inset-0 opacity-10">
+                      <div className="absolute inset-0 opacity-10">
                         {currentCard.type === "chance" ? "Chance" : "Community Chest"}
                       </div>
 
-                      {/* Glow effect */}
                       <div className="absolute inset-0 bg-white/20 animate-pulse" />
 
-                      {/* Header */}
                       <motion.div
                         initial={{ y: -30, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
@@ -707,7 +698,6 @@ const GameBoard = ({
                         )}
                       </motion.div>
 
-                      {/* Message */}
                       <motion.p
                         initial={{ y: 30, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
@@ -717,7 +707,6 @@ const GameBoard = ({
                         {currentCard.message}
                       </motion.p>
 
-                      {/* Close button */}
                       <button
                         onClick={() => setCurrentCard(null)}
                         className="absolute top-4 right-4 text-white/70 hover:text-white text-3xl transition"
@@ -725,7 +714,6 @@ const GameBoard = ({
                         ×
                       </button>
 
-                      {/* Decorative bottom glow */}
                       <div className="absolute bottom-0 left-0 right-0 h-2 bg-white/30" />
                     </motion.div>
                   </motion.div>
@@ -754,7 +742,6 @@ const GameBoard = ({
                       {["community_chest", "chance", "luxury_tax", "income_tax"].includes(square.type) && <SpecialCard square={square} />}
                       {square.type === "corner" && <CornerCard square={square} />}
 
-                      {/* Development Level Indicator */}
                       {square.type === "property" && devLevel > 0 && (
                         <div className="absolute top-1 right-1 bg-yellow-500 text-black text-xs font-bold rounded px-1 z-20 flex items-center gap-0.5">
                           {devLevel === 5 ? '🏨' : `🏠 ${devLevel}`}
@@ -771,28 +758,14 @@ const GameBoard = ({
                               className={`text-xl md:text-2xl lg:text-3xl border-2 rounded ${isCurrentPlayer ? 'border-cyan-300' : 'border-transparent'}`}
                               initial={{ scale: 1 }}
                               animate={{
-                                y: isCurrentPlayer 
-                                  ? [0, -8, 0]  // Bouncy animation for current player
-                                  : [0, -3, 0], // Subtle float for others
+                                y: isCurrentPlayer ? [0, -8, 0] : [0, -3, 0],
                                 scale: isCurrentPlayer ? [1, 1.1, 1] : 1,
-                                rotate: isCurrentPlayer ? [0, 5, -5, 0] : 0, // Slight wobble for current
+                                rotate: isCurrentPlayer ? [0, 5, -5, 0] : 0,
                               }}
                               transition={{
-                                y: {
-                                  duration: isCurrentPlayer ? 1.2 : 2,
-                                  repeat: Infinity,
-                                  ease: "easeInOut",
-                                },
-                                scale: {
-                                  duration: isCurrentPlayer ? 1.2 : 0,
-                                  repeat: Infinity,
-                                  ease: "easeInOut",
-                                },
-                                rotate: {
-                                  duration: isCurrentPlayer ? 1.5 : 0,
-                                  repeat: Infinity,
-                                  ease: "easeInOut",
-                                },
+                                y: { duration: isCurrentPlayer ? 1.2 : 2, repeat: Infinity, ease: "easeInOut" },
+                                scale: { duration: isCurrentPlayer ? 1.2 : 0, repeat: Infinity, ease: "easeInOut" },
+                                rotate: { duration: isCurrentPlayer ? 1.5 : 0, repeat: Infinity, ease: "easeInOut" },
                               }}
                               whileHover={{ scale: 1.2, y: -2 }}
                             >
@@ -827,14 +800,8 @@ const GameBoard = ({
             boxShadow: "0 10px 30px rgba(0, 255, 255, 0.15)",
             backdropFilter: "blur(10px)",
           },
-          success: {
-            icon: "✔",
-            style: { borderColor: "#10b981" },
-          },
-          error: {
-            icon: "✖",
-            style: { borderColor: "#ef4444" },
-          },
+          success: { icon: "✔", style: { borderColor: "#10b981" } },
+          error: { icon: "✖", style: { borderColor: "#ef4444" } },
         }}
       />
     </ErrorBoundary>
