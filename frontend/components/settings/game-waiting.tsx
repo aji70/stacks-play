@@ -17,9 +17,9 @@ import { apiClient } from "@/lib/api";
 import { Game } from "@/lib/types/games";
 import { getPlayerSymbolData, PlayerSymbol, symbols } from "@/lib/types/symbol";
 import { ApiResponse } from "@/types/api";
-import { TupleCV } from "@stacks/transactions";
+import { ClarityType } from "@stacks/transactions";
 
-const POLL_INTERVAL = 3000; // Fast polling for responsive feel
+const POLL_INTERVAL = 5000;
 const COPY_FEEDBACK_MS = 2000;
 
 export default function GameWaiting() {
@@ -40,12 +40,11 @@ export default function GameWaiting() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [actionLoading, setActionLoading] = useState<boolean>(false);
-  const [refetchKey, setRefetchKey] = useState(0);
 
-  // Contract state – authoritative for player count & game start
-  const [id, setId] = useState<number | null>(null);
-  const [joinedPlayers, setJoinedPlayers] = useState<number | null>(null);
-  const [numberOfPlayers, setNumberOfPlayers] = useState<number | null>(null);
+  // Contract state (authoritative)
+  const [contractId, setContractId] = useState<number | null>(null);
+  const [contractJoinedPlayers, setContractJoinedPlayers] = useState<number | null>(null);
+  const [contractNumberOfPlayers, setContractNumberOfPlayers] = useState<number | null>(null);
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -69,17 +68,18 @@ export default function GameWaiting() {
     () => `${origin}/game-waiting?gameCode=${encodeURIComponent(gameCode)}`,
     [origin, gameCode]
   );
+
   const shareText = useMemo(
     () => `Join my Tycoon game! Code: ${gameCode}. Waiting room: ${gameUrl}`,
     [gameCode, gameUrl]
   );
+
   const telegramShareUrl = useMemo(
     () =>
-      `https://t.me/share/url?url=${encodeURIComponent(
-        gameUrl
-      )}&text=${encodeURIComponent(shareText)}`,
+      `https://t.me/share/url?url=${encodeURIComponent(gameUrl)}&text=${encodeURIComponent(shareText)}`,
     [gameUrl, shareText]
   );
+
   const twitterShareUrl = useMemo(
     () => `https://x.com/intent/tweet?text=${encodeURIComponent(shareText)}`,
     [shareText]
@@ -95,14 +95,12 @@ export default function GameWaiting() {
   const checkPlayerJoined = useCallback(
     (g: Game | null) => {
       if (!g || !address) return false;
-      return g.players.some(
-        (p) => p.address.toLowerCase() === address.toLowerCase()
-      );
+      return g.players.some((p) => p.address.toLowerCase() === address.toLowerCase());
     },
     [address]
   );
 
-  // Polling effect
+  // Polling: contract is the source of truth
   useEffect(() => {
     if (!gameCode) {
       setError("No game code provided.");
@@ -110,143 +108,115 @@ export default function GameWaiting() {
       return;
     }
 
-    let timer: NodeJS.Timeout | null = null;
+    let pollTimer: number | null = null;
 
     const fetchOnce = async () => {
       setError(null);
       try {
-        // 1. Contract state (authoritative)
+        // 1. Get authoritative on-chain state
         const contractData = await handleGetGameByCode(gameCode);
-        const tuple = contractData as TupleCV;
 
-        const newId = Number((tuple.value.id as TupleCV).value);
-        const newJoined = Number((tuple.value["joined-players"] as TupleCV).value);
-        const newMax = Number((tuple.value["number-of-players"] as TupleCV).value);
+        if (!contractData) {
+          throw new Error("No contract data returned");
+        }
 
-        if (newId !== id) setId(newId);
-        if (newJoined !== joinedPlayers) setJoinedPlayers(newJoined);
-        if (newMax !== numberOfPlayers) setNumberOfPlayers(newMax);
+        if (contractData.type === ClarityType.OptionalNone) {
+          throw new Error("Game not found on chain");
+        }
 
-        // 2. Game full on-chain → start immediately
+        if (contractData.type !== ClarityType.OptionalSome) {
+          throw new Error("Unexpected response type");
+        }
+
+        const tuple = contractData.value;
+
+        if (tuple.type !== ClarityType.Tuple) {
+          throw new Error("Expected tuple data");
+        }
+
+        const data = tuple.value;
+
+        const idCV = data["id"];
+        const joinedCV = data["joined-players"];
+        const numPlayersCV = data["number-of-players"];
+
+        if (!idCV || idCV.type !== ClarityType.UInt) {
+          throw new Error("Invalid id");
+        }
+
+        if (!joinedCV || joinedCV.type !== ClarityType.UInt) {
+          throw new Error("Invalid joined-players");
+        }
+
+        if (!numPlayersCV || numPlayersCV.type !== ClarityType.UInt) {
+          throw new Error("Invalid number-of-players");
+        }
+
+        const newId = Number(idCV.value);
+        const newJoined = Number(joinedCV.value);
+        const newMax = Number(numPlayersCV.value);
+
+        setContractId(newId);
+        setContractJoinedPlayers(newJoined);
+        setContractNumberOfPlayers(newMax);
+
+        // Game full on-chain → start game
         if (newJoined === newMax && newMax > 0) {
-          const updateRes = await apiClient.put<ApiResponse>(`/games/code/${gameCode}`, { status: "RUNNING" });
-          if (updateRes?.success) {
-            router.replace(`/game-play?gameCode=${encodeURIComponent(gameCode)}`);
-          } else {
-            throw new Error(updateRes?.message ?? "Failed to update game status");
-          }
+          await apiClient.put<ApiResponse>(`/games/code/${gameCode}`, { status: "RUNNING" });
+          router.replace(`/game-play?gameCode=${encodeURIComponent(gameCode)}`);
           return;
         }
 
-        // 3. Fetch API for rich display data
-        const res = await apiClient.get<ApiResponse>(
-          `/games/code/${encodeURIComponent(gameCode)}`
-        );
+        // 2. Fetch API for rich UI (names, symbols)
+        const res = await apiClient.get<ApiResponse>(`/games/code/${encodeURIComponent(gameCode)}`);
         if (!res?.success || !res.data) throw new Error("Game not found");
 
         const gameData = res.data as Game;
 
-        console.log("Polled game data:", gameData.status);
-
-        // If backend already says RUNNING → redirect
         if (gameData.status === "RUNNING") {
           router.replace(`/game-play?gameCode=${encodeURIComponent(gameCode)}`);
           return;
         }
 
-        // 4. If API shows full players, update status and redirect (optimistic)
-        if (gameData.players.length === gameData.number_of_players) {
-          const updateRes = await apiClient.put<ApiResponse>(`/games/code/${gameCode}`, { status: "RUNNING" });
-          if (updateRes?.success) {
-            router.replace(`/game-play?gameCode=${encodeURIComponent(gameCode)}`);
-          } else {
-            throw new Error(updateRes?.message ?? "Failed to update game status");
-          }
-          return;
-        }
-
-        // Update UI state only if changed
+        // Update UI only if changed
         if (JSON.stringify(gameData) !== JSON.stringify(game)) {
           setGame(gameData);
           setAvailableSymbols(computeAvailableSymbols(gameData));
           setIsJoined(checkPlayerJoined(gameData));
         }
-      } catch (err: unknown) {
-        if (typeof err === "object" && err !== null && "name" in err) {
-          const name = (err as { name?: unknown }).name;
-          if (typeof name === "string" && name === "AbortError") return;
-        }
+      } catch (err: any) {
         console.error("fetch error:", err);
-        if (mountedRef.current)
-          setError((err as Error)?.message || "Failed to load game");
+        if (mountedRef.current) {
+          setError(err?.message || "Failed to load game");
+        }
       } finally {
         if (mountedRef.current) setLoading(false);
       }
     };
 
     fetchOnce();
-    timer = setInterval(() => {
+
+    pollTimer = window.setInterval(() => {
       if (document.hidden) return;
       fetchOnce();
     }, POLL_INTERVAL);
 
     return () => {
-      if (timer) clearInterval(timer);
+      if (pollTimer) clearInterval(pollTimer);
     };
-  }, [
-    game,
-    gameCode,
-    handleGetGameByCode,
-    id,
-    joinedPlayers,
-    numberOfPlayers,
-    computeAvailableSymbols,
-    checkPlayerJoined,
-    router,
-    refetchKey,
-  ]);
+  }, [gameCode, game, handleGetGameByCode, router]);
 
-  // Counts
-  const contractJoined = joinedPlayers ?? 0;
-  const contractMax = numberOfPlayers ?? game?.number_of_players ?? 0;
-  const apiJoined = game?.players.length ?? 0;
-  const apiMax = game?.number_of_players ?? 0;
-  const displayJoined = Math.max(contractJoined, apiJoined);
+  // Display counts from contract (authoritative)
+  const playersJoined = contractJoinedPlayers ?? game?.players.length ?? 0;
+  const maxPlayers = contractNumberOfPlayers ?? game?.number_of_players ?? 0;
 
-  const showShare = contractJoined < contractMax;
-
-  // Manual start (fallback for impatient players)
-  const handleManualStart = async () => {
-    setError(null);
-    try {
-      const updateRes = await apiClient.put<ApiResponse>(`/games/code/${gameCode}`, { status: "RUNNING" });
-      if (updateRes?.success) {
-        router.replace(`/game-play?gameCode=${encodeURIComponent(gameCode)}`);
-      } else {
-        throw new Error(updateRes?.message ?? "Failed to update game status");
-      }
-    } catch (err: unknown) {
-      setError((err as Error)?.message || "Failed to start game");
-    }
-  };
+  const showShare = playersJoined < maxPlayers;
 
   // Copy link
   const handleCopyLink = useCallback(async () => {
     if (!gameUrl) return setError("No shareable URL available.");
     try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(gameUrl);
-      } else {
-        const el = document.createElement("textarea");
-        el.value = gameUrl;
-        el.setAttribute("readonly", "");
-        el.style.position = "absolute";
-        el.style.left = "-9999px";
-        document.body.appendChild(el);
-        el.select();
-        document.execCommand("copy");
-        document.body.removeChild(el);
-      }
+      await navigator.clipboard.writeText(gameUrl);
       setCopySuccess("Copied!");
       setTimeout(() => setCopySuccess(null), COPY_FEEDBACK_MS);
     } catch (err) {
@@ -256,18 +226,18 @@ export default function GameWaiting() {
   }, [gameUrl]);
 
   // Join game
-  const handleJoin = useCallback(async () => {
+  const handleJoinGame = useCallback(async () => {
     if (!game) return setError("No game data.");
     if (!playerSymbol?.value || !availableSymbols.some((s) => s.value === playerSymbol.value))
       return setError("Please select a valid symbol.");
-    if (contractJoined >= contractMax) return setError("Game is full!");
+    if (playersJoined >= maxPlayers) return setError("Game is full!");
 
     setActionLoading(true);
     setError(null);
 
     try {
-      if (id !== null) {
-        await handleJoinGamee(id, playerSymbol.id);
+      if (contractId !== null) {
+        await handleJoinGamee(contractId, playerSymbol.id);
       }
 
       const res = await apiClient.post<ApiResponse>("/game-players/join", {
@@ -278,23 +248,19 @@ export default function GameWaiting() {
 
       if (!res?.success) throw new Error(res?.message ?? "Join failed");
 
-      if (mountedRef.current) {
-        setIsJoined(true);
-        setRefetchKey((prev) => prev + 1); // Trigger refetch after join
-      }
-    } catch (err: unknown) {
-      if (mountedRef.current)
-        setError((err as Error)?.message ?? "Failed to join game");
+      setIsJoined(true);
+    } catch (err: any) {
+      setError(err?.message ?? "Failed to join game");
     } finally {
-      if (mountedRef.current) setActionLoading(false);
+      setActionLoading(false);
     }
   }, [
     game,
     playerSymbol,
     availableSymbols,
-    contractJoined,
-    contractMax,
-    id,
+    playersJoined,
+    maxPlayers,
+    contractId,
     address,
     handleJoinGamee,
   ]);
@@ -310,16 +276,12 @@ export default function GameWaiting() {
         code: game.code,
       });
       if (!res?.success) throw new Error(res?.message ?? "Leave failed");
-      if (mountedRef.current) {
-        setIsJoined(false);
-        setPlayerSymbol(null);
-        setRefetchKey((prev) => prev + 1); // Trigger refetch after leave
-      }
-    } catch (err: unknown) {
-      if (mountedRef.current)
-        setError((err as Error)?.message ?? "Failed to leave game");
+      setIsJoined(false);
+      setPlayerSymbol(null);
+    } catch (err: any) {
+      setError(err?.message ?? "Failed to leave game");
     } finally {
-      if (mountedRef.current) setActionLoading(false);
+      setActionLoading(false);
     }
   }, [game, address]);
 
@@ -371,64 +333,40 @@ export default function GameWaiting() {
         <div className="w-full max-w-xl bg-[#0A1A1B]/80 p-5 sm:p-6 rounded-2xl shadow-2xl border border-[#00F0FF]/50 backdrop-blur-md">
           <h2 className="text-2xl sm:text-3xl font-bold font-orbitron mb-6 text-[#F0F7F7] text-center tracking-widest bg-gradient-to-r from-[#00F0FF] to-[#FF00FF] bg-clip-text text-transparent animate-pulse">
             Tycoon Lobby
-            <span className="block text-base text-[#00F0FF] mt-1 font-extrabold shadow-text">
+            <span className="block text-base text-[#00F0FF] mt-1 font-extrabold">
               Code: {gameCode}
             </span>
           </h2>
 
           <div className="text-center space-y-3 mb-6">
             <p className="text-[#869298] text-sm font-semibold">
-              {displayJoined === contractMax
-                ? "Full House! Starting..."
+              {playersJoined === maxPlayers
+                ? "Full House! Game Starting Soon..."
                 : "Assemble Your Rivals..."}
             </p>
 
             <div className="w-full bg-[#003B3E]/50 h-2 rounded-full overflow-hidden shadow-inner">
               <div
-                className="bg-gradient-to-r from-[#00F0FF] to-[#00FFAA] h-full transition-all duration-500 ease-out"
-                style={{ width: `${(displayJoined / contractMax) * 100}%` }}
-              ></div>
+                className="bg-gradient-to-r from-[#00F0FF] to-[#00FFAA] h-full transition-all duration-700 ease-out"
+                style={{ width: `${(playersJoined / maxPlayers) * 100}%` }}
+              />
             </div>
 
             <p className="text-[#00F0FF] text-lg font-bold">
-              Players Ready: {displayJoined}/{contractMax}
+              Players Ready: {playersJoined}/{maxPlayers}
             </p>
 
-            {/* Sync lag indicator */}
-            {apiJoined > contractJoined && (
-              <p className="text-yellow-400 text-sm animate-pulse">
-                ⏳ Confirming on-chain ({apiJoined}/{apiMax} joined so far)
-              </p>
-            )}
-
-            {/* Optimistic full message + manual start button */}
-            {apiJoined === apiMax && contractJoined < contractMax && (
-              <div className="mt-4 p-4 bg-green-900/50 rounded-xl border border-green-500/50">
-                <p className="text-green-300 font-bold text-lg">🎉 All players joined!</p>
-                <p className="text-sm mt-1">
-                  Waiting for final blockchain confirmation (usually 10–60s)
-                </p>
-                <button
-                  onClick={handleManualStart}
-                  className="mt-4 bg-gradient-to-r from-[#00FFAA] to-[#00F0FF] text-black px-8 py-3 rounded-xl font-bold shadow-lg hover:scale-105 transition"
-                >
-                  Start Game Now
-                </button>
-              </div>
-            )}
-
-            {/* Player slots – uses API for symbols & usernames */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 justify-center">
-              {Array.from({ length: contractMax }).map((_, index) => {
+              {Array.from({ length: maxPlayers }).map((_, index) => {
                 const player = game.players[index];
                 return (
                   <div
                     key={index}
-                    className="bg-[#010F10]/70 p-3 rounded-lg border border-[#00F0FF]/30 flex flex-col items-center justify-center shadow-md hover:shadow-[#00F0FF]/50 transition-shadow duration-300"
+                    className="bg-[#010F10]/70 p-3 rounded-lg border border-[#00F0FF]/30 flex flex-col items-center justify-center shadow-md hover:shadow-[#00F0FF]/50 transition-all duration-300"
                   >
-                    <span className="text-4xl mb-1 animate-bounce-slow">
+                    <span className="text-4xl mb-1">
                       {player
-                        ? symbols.find((s) => s.value === player.symbol)?.emoji
+                        ? symbols.find((s) => s.value === player.symbol)?.emoji ?? "❓"
                         : "❓"}
                     </span>
                     <p className="text-[#F0F7F7] text-xs font-semibold truncate max-w-[80px]">
@@ -445,32 +383,35 @@ export default function GameWaiting() {
               <h3 className="text-lg font-bold text-[#00F0FF] text-center mb-3">
                 Summon Allies!
               </h3>
+
               <div className="flex items-center gap-2">
                 <input
                   type="text"
                   value={gameUrl}
                   readOnly
-                  className="w-full bg-[#0A1A1B] text-[#F0F7F7] p-2 rounded-lg border border-[#00F0FF]/50 focus:outline-none focus:ring-2 focus:ring-[#00F0FF] font-orbitron text-xs shadow-inner"
+                  className="w-full bg-[#0A1A1B] text-[#F0F7F7] p-2 rounded-lg border border-[#00F0FF]/50 focus:outline-none font-orbitron text-xs shadow-inner"
                 />
                 <button
                   onClick={handleCopyLink}
                   disabled={actionLoading}
-                  className="flex items-center justify-center bg-gradient-to-r from-[#00F0FF] to-[#00FFAA] text-black p-2 rounded-lg hover:opacity-90 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+                  className="bg-gradient-to-r from-[#00F0FF] to-[#00FFAA] text-black p-2 rounded-lg hover:opacity-90 transition-all shadow-md hover:shadow-lg"
                 >
                   <IoCopyOutline className="w-5 h-5" />
                 </button>
               </div>
+
               {copySuccess && (
-                <p className="text-green-400 text-xs text-center animate-fade-in">
+                <p className="text-green-400 text-xs text-center animate-pulse">
                   {copySuccess}
                 </p>
               )}
+
               <div className="flex justify-center gap-5">
                 <a
                   href={telegramShareUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center bg-[#0A1A1B] text-[#0FF0FC] p-3 rounded-full border border-[#00F0FF]/50 hover:bg-[#00F0FF]/20 transition-all duration-300 shadow-md hover:shadow-[#00F0FF]/50 transform hover:scale-110"
+                  className="bg-[#0A1A1B] text-[#0FF0FC] p-3 rounded-full border border-[#00F0FF]/50 hover:bg-[#00F0FF]/20 transition-all shadow-md hover:shadow-[#00F0FF]/50 hover:scale-110"
                 >
                   <PiTelegramLogoLight className="w-6 h-6" />
                 </a>
@@ -478,7 +419,7 @@ export default function GameWaiting() {
                   href={twitterShareUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center bg-[#0A1A1B] text-[#0FF0FC] p-3 rounded-full border border-[#00F0FF]/50 hover:bg-[#00F0FF]/20 transition-all duration-300 shadow-md hover:shadow-[#00F0FF]/50 transform hover:scale-110"
+                  className="bg-[#0A1A1B] text-[#0FF0FC] p-3 rounded-full border border-[#00F0FF]/50 hover:bg-[#00F0FF]/20 transition-all shadow-md hover:shadow-[#00F0FF]/50 hover:scale-110"
                 >
                   <FaXTwitter className="w-6 h-6" />
                 </a>
@@ -486,22 +427,18 @@ export default function GameWaiting() {
             </div>
           )}
 
-          {contractJoined < contractMax && !isJoined && (
+          {playersJoined < maxPlayers && !isJoined && (
             <div className="mt-6 space-y-5">
-              <div className="flex flex-col bg-[#010F10]/50 p-5 rounded-xl border border-[#00F0FF]/30 shadow-lg">
-                <label
-                  htmlFor="symbol"
-                  className="text-sm text-[#00F0FF] mb-1 font-orbitron font-bold"
-                >
+              <div className="bg-[#010F10]/50 p-5 rounded-xl border border-[#00F0FF]/30 shadow-lg">
+                <label className="text-sm text-[#00F0FF] mb-1 font-orbitron font-bold">
                   Pick Your Token
                 </label>
                 <select
-                  id="symbol"
                   value={playerSymbol?.value ?? ""}
                   onChange={(e) =>
                     setPlayerSymbol(getPlayerSymbolData(e.target.value) ?? null)
                   }
-                  className="bg-[#0A1A1B] text-[#F0F7F7] p-2 rounded-lg border border-[#00F0FF]/50 focus:outline-none focus:ring-2 focus:ring-[#00F0FF] font-orbitron text-sm shadow-inner"
+                  className="w-full bg-[#0A1A1B] text-[#F0F7F7] p-2 rounded-lg border border-[#00F0FF]/50 focus:outline-none focus:ring-2 focus:ring-[#00F0FF] font-orbitron text-sm shadow-inner"
                 >
                   <option value="" disabled>
                     Select Token
@@ -519,40 +456,46 @@ export default function GameWaiting() {
               </div>
 
               <button
-                onClick={handleJoin}
+                onClick={handleJoinGame}
                 disabled={!playerSymbol || actionLoading}
-                className="w-full bg-gradient-to-r from-[#00F0FF] to-[#FF00FF] text-black text-sm font-orbitron font-extrabold py-3 rounded-xl hover:opacity-90 transition-all duration-300 shadow-lg hover:shadow-[#00F0FF]/50 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-gradient-to-r from-[#00F0FF] to-[#FF00FF] text-black font-orbitron font-extrabold py-3 rounded-xl shadow-lg hover:scale-105 transition disabled:opacity-50"
               >
                 {actionLoading ? "Entering..." : "Join the Battle"}
               </button>
             </div>
           )}
 
-          {contractJoined < contractMax && isJoined && (
+          {playersJoined < maxPlayers && isJoined && (
             <button
               onClick={handleLeaveGame}
               disabled={actionLoading}
-              className="w-full mt-6 bg-gradient-to-r from-[#FF4D4D] to-[#FF00AA] text-white text-sm font-orbitron font-extrabold py-3 rounded-xl hover:opacity-90 transition-all duration-300 shadow-lg hover:shadow-red-500/50 transform hover:scale-105 disabled:opacity-50"
+              className="w-full mt-6 bg-gradient-to-r from-[#FF4D4D] to-[#FF00AA] text-white font-orbitron font-extrabold py-3 rounded-xl shadow-lg hover:scale-105 transition"
             >
               {actionLoading ? "Exiting..." : "Abandon Ship"}
             </button>
           )}
 
-          <div className="flex justify-between mt-5 px-3">
+          <div className="flex justify-between mt-6 px-3">
             <button
               onClick={() => router.push("/join-room")}
-              className="text-[#0FF0FC] text-sm font-orbitron hover:text-[#00D4E6] transition-colors duration-200 hover:underline"
+              className="text-[#0FF0FC] text-sm font-orbitron hover:underline"
             >
               Switch Portal
             </button>
             <button
               onClick={handleGoHome}
-              className="flex items-center text-[#0FF0FC] text-sm font-orbitron hover:text-[#00D4E6] transition-colors duration-200 hover:underline"
+              className="flex items-center text-[#0FF0FC] text-sm font-orbitron hover:underline"
             >
               <IoHomeOutline className="mr-1 w-4 h-4" />
               Back to HQ
             </button>
           </div>
+
+          {error && (
+            <p className="text-red-400 text-xs mt-4 text-center bg-red-900/50 p-2 rounded-lg animate-pulse">
+              {error}
+            </p>
+          )}
         </div>
       </main>
     </section>
