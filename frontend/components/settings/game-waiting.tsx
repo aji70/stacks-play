@@ -17,7 +17,7 @@ import { apiClient } from "@/lib/api";
 import { Game } from "@/lib/types/games";
 import { getPlayerSymbolData, PlayerSymbol, symbols } from "@/lib/types/symbol";
 import { ApiResponse } from "@/types/api";
-import { ClarityType, TupleCV, UIntCV } from "@stacks/transactions";
+import { ClarityType, OptionalCV, TupleCV, UIntCV } from "@stacks/transactions";
 
 const POLL_INTERVAL = 5000;
 const COPY_FEEDBACK_MS = 2000;
@@ -28,7 +28,7 @@ export default function GameWaiting() {
   const rawGameCode = searchParams.get("gameCode") ?? "";
   const gameCode = rawGameCode.trim().toUpperCase();
 
-  const { userData, handleGetGameByCode, handleJoinGamee } = useStacks();
+  const { userData, handleGetGameByCode, handleJoinGamee, fetchGameInfo } = useStacks();
   const address = userData?.addresses?.stx?.[0]?.address ?? "";
 
   // UI state
@@ -116,26 +116,66 @@ export default function GameWaiting() {
         // 1. Get authoritative on-chain state
         const contractData = await handleGetGameByCode(gameCode);
 
-        if (!contractData) {
-          throw new Error("No contract data returned");
+        if (!contractData || contractData.type === ClarityType.OptionalNone) {
+          throw new Error("Game not found");
         }
 
-        if (contractData.type !== ClarityType.Tuple) {
-          throw new Error("Expected tuple from contract");
+        if (contractData.type !== ClarityType.OptionalSome) {
+          throw new Error("Unexpected response type");
         }
 
-        const tupleData = (contractData as TupleCV).value;
+        const inner = contractData.value;
 
-        // Safe extraction with defaults
+        if (inner.type !== ClarityType.Tuple) {
+          throw new Error("Expected tuple data");
+        }
+
+        const tupleData = inner.value;
+
         const idCV = tupleData['id'] as UIntCV | undefined;
-        const joinedCV = tupleData['joined-players'] as UIntCV | undefined;
-        const maxCV = tupleData['number-of-players'] as UIntCV | undefined;
 
-        const newId = idCV ? Number(idCV.value) : 0;
-        const newJoined = joinedCV ? Number(joinedCV.value) : 0;
-        const newMax = maxCV ? Number(maxCV.value) : 0;
+        if (!idCV || idCV.type !== ClarityType.UInt) {
+          throw new Error("Invalid id");
+        }
 
-        setContractId(newId);
+        const gameId = Number(idCV.value);
+
+        const game = await fetchGameInfo(gameId);
+
+        if (!game || game.type === ClarityType.OptionalNone) {
+          throw new Error("Game not found on-chain");
+        }
+
+        if (game.type !== ClarityType.OptionalSome) {
+          throw new Error("Unexpected game response type");
+        }
+
+        const gameInner = game.value;
+
+        if (gameInner.type !== ClarityType.Tuple) {
+          throw new Error("Expected game tuple data");
+        }
+
+        const gameData = gameInner.value;
+
+        const joinedCV = gameData['joined-players'] as UIntCV | undefined;
+        const maxCV = gameData['number-of-players'] as UIntCV | undefined;
+
+        if (!joinedCV || joinedCV.type !== ClarityType.UInt) {
+          throw new Error("Invalid joined-players");
+        }
+
+        if (!maxCV || maxCV.type !== ClarityType.UInt) {
+          throw new Error("Invalid number-of-players");
+        }
+
+        console.log("joinedCV:", joinedCV);
+        console.log("maxCV:", maxCV);
+
+        const newJoined = Number(joinedCV.value);
+        const newMax = Number(maxCV.value);
+
+        setContractId(gameId);
         setContractJoinedPlayers(newJoined);
         setContractNumberOfPlayers(newMax);
 
@@ -150,18 +190,18 @@ export default function GameWaiting() {
         const res = await apiClient.get<ApiResponse>(`/games/code/${encodeURIComponent(gameCode)}`);
         if (!res?.success || !res.data) throw new Error("Game not found");
 
-        const gameData = res.data as Game;
+        const gameDataApi = res.data as Game;
 
-        if (gameData.status === "RUNNING") {
+        if (gameDataApi.status === "RUNNING") {
           router.replace(`/game-play?gameCode=${encodeURIComponent(gameCode)}`);
           return;
         }
 
         // Update UI only if changed
-        if (JSON.stringify(gameData) !== JSON.stringify(game)) {
-          setGame(gameData);
-          setAvailableSymbols(computeAvailableSymbols(gameData));
-          setIsJoined(checkPlayerJoined(gameData));
+        if (JSON.stringify(gameDataApi) !== JSON.stringify(game)) {
+          setGame(gameDataApi);
+          setAvailableSymbols(computeAvailableSymbols(gameDataApi));
+          setIsJoined(checkPlayerJoined(gameDataApi));
         }
       } catch (err: any) {
         console.error("fetch error:", err);
@@ -183,7 +223,7 @@ export default function GameWaiting() {
     return () => {
       if (pollTimer) clearInterval(pollTimer);
     };
-  }, [gameCode, game, handleGetGameByCode, router, checkPlayerJoined, computeAvailableSymbols]);
+  }, [gameCode, game, handleGetGameByCode, fetchGameInfo, router, checkPlayerJoined, computeAvailableSymbols]);
 
   // Display counts from contract (authoritative)
   const playersJoined = contractJoinedPlayers ?? game?.players.length ?? 0;
