@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@hirosystems/chainhooks-client": "^1.0.0",
     "@radix-ui/react-select": "^2.2.6",
     "@radix-ui/react-switch": "^1.2.6",
     "@stacks/connect": "^8.2.1",
@@ -16,6 +17,7 @@
     "@stacks/transactions": "^7.2.0",
     "@tanstack/react-query": "^5.90.12",
     "@tanstack/react-query-devtools": "^5.91.1",
+    "dotenv": "^17.2.3",
     "framer-motion": "^12.23.24",
     "lucide-react": "^0.548.0",
     "next": "^16.0.8",
