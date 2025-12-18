@@ -13,7 +13,7 @@ interface MobileGamePlayersProps {
   game: Game;
   properties: Property[];
   game_properties: GameProperty[];
-  my_properties: Property[];
+  my_properties: Property[] | undefined;
   me: Player | null;
 }
 
@@ -21,7 +21,7 @@ export default function MobileGamePlayers({
   game,
   properties,
   game_properties,
-  my_properties,
+  my_properties = [],
   me,
 }: MobileGamePlayersProps) {
   const { userData } = useStacks();
@@ -29,6 +29,7 @@ export default function MobileGamePlayers({
 
   const [showEmpire, setShowEmpire] = useState(true);
   const [showTrades, setShowTrades] = useState(true);
+  const [tradeRequests, setTradeRequests] = useState<any[]>([]);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [tradeModal, setTradeModal] = useState<{ open: boolean; target: Player | null }>({
     open: false,
@@ -47,7 +48,7 @@ export default function MobileGamePlayers({
   const [requestCash, setRequestCash] = useState(0);
 
   const [openTrades, setOpenTrades] = useState<any[]>([]);
-  const [tradeRequests, setTradeRequests] = useState<any[]>([]);
+  const [incomingTrades, setIncomingTrades] = useState<any[]>([]);
 
   const processedAiTradeIds = useRef<Set<number>>(new Set());
 
@@ -200,8 +201,7 @@ export default function MobileGamePlayers({
     }
   }, [me, game?.id, game.players]);
 
-
- useEffect(() => {
+  useEffect(() => {
     if (!me || !game?.id) return;
     let isFetching = false;
     let interval: NodeJS.Timeout;
@@ -221,9 +221,13 @@ export default function MobileGamePlayers({
 
     startPolling();
     return () => clearInterval(interval);
-  }, [fetchTrades]);
+  }, [fetchTrades]);;
 
- const handleCreateTrade = async () => {
+  useEffect(() => {
+    processedAiTradeIds.current.clear();
+  }, [game?.id]);
+
+  const handleCreateTrade = async () => {
     if (!me || !tradeModal.target) return;
 
     const targetPlayer = tradeModal.target;
@@ -298,8 +302,8 @@ export default function MobileGamePlayers({
       toast.error(error?.message || "Failed to create trade");
     }
   };
- 
-  const handleTradeAction = async (id: number, action: "accepted" | "declined" | "counter") => {
+
+   const handleTradeAction = async (id: number, action: "accepted" | "declined" | "counter") => {
     try {
       if (action === "counter") {
         const trade = tradeRequests.find((t) => t.id === id);
@@ -328,7 +332,7 @@ export default function MobileGamePlayers({
     }
   };
 
-  const submitCounterTrade = async () => {
+   const submitCounterTrade = async () => {
     if (!me || !counterModal.trade) return;
     try {
       const payload = {
@@ -352,7 +356,7 @@ export default function MobileGamePlayers({
     }
   };
 
- const handleDevelopment = async (id: number) => {
+  const handleDevelopment = async (id: number) => {
     if (!isNext || !me) return;
     try {
       const res = await apiClient.post<ApiResponse>("/game-properties/development", {
@@ -367,7 +371,7 @@ export default function MobileGamePlayers({
     }
   };
 
- const handleDowngrade = async (id: number) => {
+  const handleDowngrade = async (id: number) => {
     if (!isNext || !me) return;
     try {
       const res = await apiClient.post<ApiResponse>("/game-properties/downgrade", {
@@ -382,7 +386,7 @@ export default function MobileGamePlayers({
     }
   };
 
-   const handleMortgage = async (id: number) => {
+  const handleMortgage = async (id: number) => {
     if (!isNext || !me) return;
     try {
       const res = await apiClient.post<ApiResponse>("/game-properties/mortgage", {
@@ -412,6 +416,7 @@ export default function MobileGamePlayers({
     }
   };
 
+
   return (
     <aside className="w-full h-full bg-gradient-to-b from-[#0a0e17] to-[#1a0033] overflow-y-auto relative">
       <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-pink-500 via-cyan-400 to-purple-600 shadow-lg shadow-cyan-400/80" />
@@ -429,7 +434,7 @@ export default function MobileGamePlayers({
           const isTurn = p.user_id === game.next_player_id;
           const canTrade = isNext && !p.in_jail && !isMe;
           const displayName = p.username || p.address?.slice(0, 6) || "Player";
-          const isAI = displayName.toLowerCase().includes("ai_") || displayName.toLowerCase().includes("bot");
+          const isAI = displayName.toLowerCase().includes("ai") || displayName.toLowerCase().includes("bot");
 
           return (
             <motion.div
@@ -489,24 +494,30 @@ export default function MobileGamePlayers({
                 exit={{ height: 0 }}
                 className="overflow-hidden mt-2 grid grid-cols-2 gap-2"
               >
-                {my_properties.map((prop, i) => (
-                  <motion.div
-                    key={prop.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.05 }}
-                    onClick={() => isNext && setSelectedProperty(prop)}
-                    whileHover={{ scale: 1.05 }}
-                    className="bg-black/60 border-2 border-cyan-600 rounded-lg p-2 cursor-pointer shadow-md"
-                  >
-                    {prop.color && <div className="h-2 rounded" style={{ backgroundColor: prop.color }} />}
-                    <div className="mt-1 text-xs font-bold text-cyan-200 truncate">{prop.name}</div>
-                    <div className="text-xxs text-green-400">Rent: ${rentPrice(prop.id)}</div>
-                    {isMortgaged(prop.id) && (
-                      <div className="text-red-500 text-xxs mt-1 font-bold animate-pulse">MORTGAGED</div>
-                    )}
-                  </motion.div>
-                ))}
+                {my_properties.length > 0 ? (
+                  my_properties.map((prop, i) => (
+                    <motion.div
+                      key={prop.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.05 }}
+                      onClick={() => isNext && setSelectedProperty(prop)}
+                      whileHover={{ scale: 1.05 }}
+                      className="bg-black/60 border-2 border-cyan-600 rounded-lg p-2 cursor-pointer shadow-md"
+                    >
+                      {prop.color && <div className="h-2 rounded" style={{ backgroundColor: prop.color }} />}
+                      <div className="mt-1 text-xs font-bold text-cyan-200 truncate">{prop.name}</div>
+                      <div className="text-xxs text-green-400">Rent: ${rentPrice(prop.id)}</div>
+                      {isMortgaged(prop.id) && (
+                        <div className="text-red-500 text-xxs mt-1 font-bold animate-pulse">MORTGAGED</div>
+                      )}
+                    </motion.div>
+                  ))
+                ) : (
+                  <div className="col-span-2 text-center text-gray-500 py-8 text-sm">
+                    No properties yet..
+                  </div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -517,20 +528,20 @@ export default function MobileGamePlayers({
             onClick={() => setShowTrades((v) => !v)}
             className="w-full text-lg font-bold text-pink-300 flex justify-between items-center"
           >
-            <span>TRADES {tradeRequests.length > 0 && `(${tradeRequests.length} pending)`}</span>
+            <span>TRADES {incomingTrades.length > 0 && `(${incomingTrades.length} pending)`}</span>
             <motion.span animate={{ rotate: showTrades ? 180 : 0 }} className="text-2xl text-cyan-400">
               ▼
             </motion.span>
           </button>
           <AnimatePresence>
-            {showTrades && (openTrades.length > 0 || tradeRequests.length > 0) && (
+            {showTrades && incomingTrades.length > 0 && (
               <motion.div
                 initial={{ height: 0 }}
                 animate={{ height: "auto" }}
                 exit={{ height: 0 }}
                 className="overflow-hidden mt-3 space-y-3"
               >
-                {tradeRequests.map((trade: any) => {
+                {incomingTrades.map((trade: any) => {
                   const from = game.players.find((p: Player) => p.user_id === trade.player_id);
                   const offerProps = properties.filter((p: Property) => trade.offer_properties?.includes(p.id));
                   const requestProps = properties.filter((p: Property) => trade.requested_properties?.includes(p.id));
@@ -706,7 +717,7 @@ export default function MobileGamePlayers({
                 {aiResponsePopup.decision === "accepted" ? "✅ ACCEPTED!" : "❌ DECLINED"}
               </div>
               <p className="text-center text-sm italic text-gray-300 mb-6">
-                &quot;{aiResponsePopup.remark}&quot;
+                "{aiResponsePopup.remark}"
               </p>
               <button
                 onClick={() => setAiResponsePopup(null)}
@@ -719,7 +730,7 @@ export default function MobileGamePlayers({
         )}
       </AnimatePresence>
 
-      {/* Mobile-Optimized Trade Modal (Single Column) */}
+      {/* Trade Modal - Create */}
       <TradeModal
         open={tradeModal.open}
         title="CREATE TRADE"
@@ -740,6 +751,7 @@ export default function MobileGamePlayers({
         targetPlayerAddress={tradeModal.target?.address}
       />
 
+      {/* Trade Modal - Counter */}
       <TradeModal
         open={counterModal.open}
         title="COUNTER OFFER"
@@ -828,7 +840,6 @@ function TradeModal({
 
         <h2 className="text-3xl font-bold text-cyan-300 text-center mb-8">{title}</h2>
 
-        {/* Single column layout */}
         <div className="space-y-8">
           <div>
             <h3 className="text-2xl font-bold text-green-400 mb-4 text-center">YOU GIVE</h3>
