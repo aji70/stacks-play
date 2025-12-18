@@ -1,646 +1,896 @@
 "use client";
 
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import PropertyCardMobile from "./cards/property-card-mobile";
-import SpecialCard from "./cards/special-card";
-import CornerCard from "./cards/corner-card";
-import { getPlayerSymbol } from "@/lib/types/symbol";
-import {
-  Game,
-  GameProperty,
-  Property,
-  Player,
-  PROPERTY_ACTION,
-} from "@/types/game";
-import { apiClient } from "@/lib/api";
-import toast, { Toaster } from "react-hot-toast";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Game, GameProperty, Player, Property } from "@/types/game";
+import { useStacks } from "@/hooks/use-stacks";
+import { getPlayerSymbol } from "@/lib/types/symbol";
+import toast from "react-hot-toast";
+import { apiClient } from "@/lib/api";
 import { ApiResponse } from "@/types/api";
 
-const BOARD_SQUARES = 40;
-const ROLL_ANIMATION_MS = 800;
-
-const DiceFace = ({ value }: { value: number }) => {
-  const dotPositions: Record<number, [number, number][]> = {
-    1: [[50, 50]],
-    2: [[28, 28], [72, 72]],
-    3: [[28, 28], [50, 50], [72, 72]],
-    4: [[28, 28], [28, 72], [72, 28], [72, 72]],
-    5: [[28, 28], [28, 72], [50, 50], [72, 28], [72, 72]],
-    6: [[28, 28], [28, 50], [28, 72], [72, 28], [72, 50], [72, 72]],
-  };
-
-  return (
-    <>
-      {dotPositions[value].map(([x, y], i) => (
-        <div
-          key={i}
-          className="absolute w-5 h-5 bg-black rounded-full shadow-inner"
-          style={{
-            top: `${y}%`,
-            left: `${x}%`,
-            transform: "translate(-50%, -50%)",
-          }}
-        />
-      ))}
-    </>
-  );
-};
-
-const getDiceValues = (): { die1: number; die2: number; total: number } | null => {
-  const die1 = Math.floor(Math.random() * 6) + 1;
-  const die2 = Math.floor(Math.random() * 6) + 1;
-  const total = die1 + die2;
-  return total === 12 ? null : { die1, die2, total };
-};
-
-const isTopHalf = (square: Property) => square.grid_row === 1;
-
-const MobileGameLayout = ({
-  game,
-  properties,
-  game_properties,
-  me,
-}: {
+interface MobileGamePlayersProps {
   game: Game;
   properties: Property[];
   game_properties: GameProperty[];
+  my_properties: Property[];
   me: Player | null;
-}) => {
-  const [players, setPlayers] = useState<Player[]>(game?.players ?? []);
-  const [roll, setRoll] = useState<{ die1: number; die2: number; total: number } | null>(null);
-  const [isRolling, setIsRolling] = useState(false);
-  const [pendingRoll, setPendingRoll] = useState(0);
-  const [actionLock, setActionLock] = useState<"ROLL" | "END" | null>(null);
-  const [buyPrompted, setBuyPrompted] = useState(false);
-  const [showLog, setShowLog] = useState(false);
-  const [focusedProperty, setFocusedProperty] = useState<Property | null>(null);
+}
 
-  const currentPlayerId = game.next_player_id;
-  const currentPlayer = players.find((p) => p.user_id === currentPlayerId);
-  const isMyTurn = me?.user_id === currentPlayerId;
-  const isAITurn =
-    currentPlayer?.username?.toLowerCase().includes("ai_") ||
-    currentPlayer?.username?.toLowerCase().includes("bot");
+export default function MobileGamePlayers({
+  game,
+  properties,
+  game_properties,
+  my_properties,
+  me,
+}: MobileGamePlayersProps) {
+  const { userData } = useStacks();
+  const address = userData?.addresses?.stx?.[0]?.address;
 
-  const lastProcessed = useRef<number | null>(null);
-  const logRef = useRef<HTMLDivElement>(null);
-  const rolledForPlayerId = useRef<number | null>(null);
-  const boardRef = useRef<HTMLDivElement>(null);
+  const [showEmpire, setShowEmpire] = useState(true);
+  const [showTrades, setShowTrades] = useState(true);
+  const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
+  const [tradeModal, setTradeModal] = useState<{ open: boolean; target: Player | null }>({
+    open: false,
+    target: null,
+  });
+  const [counterModal, setCounterModal] = useState<{ open: boolean; trade: any | null }>({
+    open: false,
+    trade: null,
+  });
+  const [aiTradePopup, setAiTradePopup] = useState<any | null>(null);
+  const [aiResponsePopup, setAiResponsePopup] = useState<any | null>(null);
 
-  const currentProperty = currentPlayer?.position
-    ? properties.find(p => p.id === currentPlayer.position)
-    : null;
+  const [offerProperties, setOfferProperties] = useState<number[]>([]);
+  const [requestProperties, setRequestProperties] = useState<number[]>([]);
+  const [offerCash, setOfferCash] = useState(0);
+  const [requestCash, setRequestCash] = useState(0);
 
-  const buyScore = useMemo(() => {
-    if (!isAITurn || !buyPrompted || !currentPlayer || !currentProperty) return null;
+  const [openTrades, setOpenTrades] = useState<any[]>([]);
+  const [tradeRequests, setTradeRequests] = useState<any[]>([]);
 
-    // Simple placeholder — replace with your full calculateBuyScore if needed
-    return 75; // Mock confidence for demo
-  }, [isAITurn, buyPrompted, currentPlayer, currentProperty]);
+  const processedAiTradeIds = useRef<Set<number>>(new Set());
 
-  const showToast = useCallback((message: string, type: "success" | "error" | "default" = "default") => {
-    toast.dismiss();
-    if (type === "success") toast.success(message);
-    else if (type === "error") toast.error(message);
-    else toast(message, { icon: "➤" });
-  }, []);
+  const isNext = me && game.next_player_id === me.user_id;
 
-  useEffect(() => {
-    if (game?.players) setPlayers(game.players);
-  }, [game?.players]);
-
-  useEffect(() => {
-    if (logRef.current) {
-      logRef.current.scrollTop = logRef.current.scrollHeight;
-    }
-  }, [game.history?.length]);
-
-  const lockAction = useCallback((type: "ROLL" | "END") => {
-    if (actionLock) return false;
-    setActionLock(type);
-    return true;
-  }, [actionLock]);
-
-  const unlockAction = useCallback(() => setActionLock(null), []);
-
-  const fetchUpdatedGame = useCallback(async () => {
-    try {
-      const res = await apiClient.get<ApiResponse<Game>>(`/games/code/${game.code}`);
-
-      if (res.success && res.data?.players) {
-        setPlayers(res.data.players);
-      }
-    } catch (err) {
-      console.error("Sync failed:", err);
-    }
-  }, [game.code]);
-
-  useEffect(() => {
-    const interval = setInterval(fetchUpdatedGame, 8000);
-    return () => clearInterval(interval);
-  }, [fetchUpdatedGame]);
-
-  const END_TURN = useCallback(async () => {
-    if (!currentPlayerId || !lockAction("END")) return;
-
-    try {
-      await apiClient.post("/game-players/end-turn", {
-        user_id: currentPlayerId,
-        game_id: game.id,
-      });
-      showToast("Turn ended", "success");
-      setRoll(null);
-      setBuyPrompted(false);
-      rolledForPlayerId.current = null;
-      await fetchUpdatedGame();
-    } catch {
-      showToast("Failed to end turn", "error");
-    } finally {
-      unlockAction();
-    }
-  }, [currentPlayerId, game.id, fetchUpdatedGame, lockAction, unlockAction, showToast]);
-
-  const BUY_PROPERTY = useCallback(async () => {
-    if (!currentPlayer?.position || actionLock) return;
-    const square = properties.find((p) => p.id === currentPlayer.position);
-    if (!square || game_properties.some((gp) => gp.property_id === square.id)) {
-      setBuyPrompted(false);
-      return;
-    }
-
-    try {
-      await apiClient.post("/game-properties/buy", {
-        user_id: currentPlayer.user_id,
-        game_id: game.id,
-        property_id: square.id,
-      });
-
-      showToast(`You bought ${square.name}!`, "success");
-      setBuyPrompted(false);
-      await fetchUpdatedGame();
-      setTimeout(END_TURN, 1000);
-    } catch (err) {
-      showToast("Purchase failed", "error");
-    }
-  }, [currentPlayer, properties, game_properties, game.id, fetchUpdatedGame, actionLock, END_TURN, showToast]);
-
-  const ROLL_DICE = useCallback(async (forAI = false) => {
-    if (isRolling || actionLock || !lockAction("ROLL")) return;
-
-    setIsRolling(true);
-    setRoll(null);
-
-    setTimeout(async () => {
-      const value = getDiceValues();
-      if (!value) {
-        showToast("DOUBLES! Roll again!", "success");
-        setIsRolling(false);
-        unlockAction();
-        return;
-      }
-
-      setRoll(value);
-      const playerId = forAI ? currentPlayerId! : me!.user_id;
-      const currentPos = players.find((p) => p.user_id === playerId)?.position ?? 0;
-      const newPos = (currentPos + value.total + pendingRoll) % BOARD_SQUARES;
-
-      try {
-        await apiClient.post("/game-players/change-position", {
-          user_id: playerId,
-          game_id: game.id,
-          position: newPos,
-          rolled: value.total + pendingRoll,
-          is_double: value.die1 === value.die2,
-        });
-
-        setPendingRoll(0);
-        await fetchUpdatedGame();
-
-        showToast(
-          `${currentPlayer?.username} rolled ${value.die1} + ${value.die2} = ${value.total}!`,
-          "success"
-        );
-
-        if (forAI) rolledForPlayerId.current = currentPlayerId;
-      } catch {
-        showToast("Move failed", "error");
-        if (forAI) rolledForPlayerId.current = currentPlayerId;
-        END_TURN();
-      } finally {
-        setIsRolling(false);
-        unlockAction();
-      }
-    }, ROLL_ANIMATION_MS);
-  }, [
-    isRolling, actionLock, lockAction, unlockAction,
-    currentPlayerId, me, players, pendingRoll, game.id,
-    fetchUpdatedGame, currentPlayer?.username, END_TURN, showToast
-  ]);
-
-  useEffect(() => {
-    if (!isAITurn || isRolling || actionLock || (currentPlayer?.rolls ?? 0) > 0 || rolledForPlayerId.current === currentPlayerId) return;
-
-    const timer = setTimeout(() => ROLL_DICE(true), 1200);
-    return () => clearTimeout(timer);
-  }, [isAITurn, isRolling, actionLock, currentPlayer?.rolls, currentPlayerId, ROLL_DICE]);
-
-  useEffect(() => {
-    if (!currentPlayer?.position || !properties.length || currentPlayer.position === lastProcessed.current) return;
-    lastProcessed.current = currentPlayer.position;
-
-    const square = properties.find((p) => p.id === currentPlayer.position);
-    if (!square) return;
-
-    const hasRolled = (currentPlayer.rolls ?? 0) > 0;
-    const isOwned = game_properties.some((gp) => gp.property_id === square.id);
-    const action = PROPERTY_ACTION(square.id);
-
-    setBuyPrompted(false);
-
-    const canBuy = hasRolled && !isOwned && action && ["land", "railway", "utility"].includes(action);
-    if (canBuy) setBuyPrompted(true);
-  }, [
-    currentPlayer?.position,
-    currentPlayer?.rolls,
-    properties,
-    game_properties,
-    currentPlayerId,
-  ]);
-
-  useEffect(() => {
-    if (!isAITurn || !buyPrompted || !currentPlayer || !currentProperty || buyScore === null) return;
-
-    const timer = setTimeout(async () => {
-      const shouldBuy = buyScore >= 60;
-
-      if (shouldBuy) {
-        showToast(`AI buys ${currentProperty.name} (${buyScore}%)`, "success");
-        await BUY_PROPERTY();
-      } else {
-        showToast(`AI skips ${currentProperty.name} (${buyScore}%)`);
-      }
-
-      setTimeout(END_TURN, shouldBuy ? 1300 : 900);
-    }, 1800);
-
-    return () => clearTimeout(timer);
-  }, [isAITurn, buyPrompted, currentPlayer, currentProperty, buyScore, BUY_PROPERTY, END_TURN, showToast]);
-
-  useEffect(() => {
-    if (!isAITurn || (currentPlayer?.rolls ?? 0) === 0 || buyPrompted || actionLock) return;
-
-    const timer = setTimeout(() => END_TURN(), 1500);
-    return () => clearTimeout(timer);
-  }, [isAITurn, currentPlayer?.rolls, buyPrompted, actionLock, END_TURN]);
-
-  useEffect(() => {
-    if (!isMyTurn || isRolling || actionLock) return;
-    if (!currentPlayer?.rolls || currentPlayer.rolls === 0) return;
-
-    const square = currentProperty;
-    if (!square) return;
-
-    const isOwned = game_properties.some(gp => gp.property_id === square.id);
-    const action = PROPERTY_ACTION(square.id);
-    const canBuy = !isOwned && action && ["land", "railway", "utility"].includes(action);
-
-    if (!canBuy && !buyPrompted) {
-      const timer = setTimeout(() => END_TURN(), 1200);
-      return () => clearTimeout(timer);
-    }
-  }, [
-    isMyTurn,
-    isRolling,
-    actionLock,
-    currentPlayer?.rolls,
-    currentProperty,
-    game_properties,
-    buyPrompted,
-    END_TURN
-  ]);
-
-  const playersByPosition = useMemo(() => {
-    const map = new Map<number, Player[]>();
-    players.forEach((p) => {
-      const pos = p.position ?? 0;
-      if (!map.has(pos)) map.set(pos, []);
-      map.get(pos)!.push(p);
-    });
-    return map;
-  }, [players]);
-
-  const propertyOwner = (id: number) => {
-    const gp = game_properties.find((gp) => gp.property_id === id);
-    return gp ? players.find((p) => p.address === gp.address)?.username || null : null;
+  const resetTradeFields = () => {
+    setOfferCash(0);
+    setRequestCash(0);
+    setOfferProperties([]);
+    setRequestProperties([]);
   };
 
-  const developmentStage = (id: number) =>
-    game_properties.find((gp) => gp.property_id === id)?.development ?? 0;
+  const isMortgaged = useCallback(
+    (id: number) => game_properties.find((gp) => gp.property_id === id)?.mortgaged ?? false,
+    [game_properties]
+  );
 
-  useEffect(() => {
-    if (boardRef.current && currentProperty) {
-      const squareElement = boardRef.current.querySelector(`[data-position="${currentProperty.id}"]`);
-      if (squareElement) {
-        squareElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-      }
+  const developmentStage = useCallback(
+    (id: number) => game_properties.find((gp) => gp.property_id === id)?.development ?? 0,
+    [game_properties]
+  );
+
+  const rentPrice = useCallback(
+    (id: number): number => {
+      const p = properties.find((prop) => prop.id === id);
+      if (!p) return 0;
+      const dev = developmentStage(id);
+      const rents = [
+        p.rent_site_only,
+        p.rent_one_house,
+        p.rent_two_houses,
+        p.rent_three_houses,
+        p.rent_four_houses,
+        p.rent_hotel,
+      ];
+      return rents[dev] ?? 0;
+    },
+    [properties, developmentStage]
+  );
+
+  const sortedPlayers = useMemo(
+    () =>
+      [...(game?.players ?? [])].sort(
+        (a: Player, b: Player) => (a.turn_order ?? 99) - (b.turn_order ?? 99)
+      ),
+    [game?.players]
+  );
+
+  const toggleSelect = (
+    id: number,
+    arr: number[],
+    setter: React.Dispatch<React.SetStateAction<number[]>>
+  ) => {
+    setter((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const startTrade = (p: Player) => {
+    if (!isNext) {
+      toast.error("Not your turn!");
+      return;
     }
-  }, [currentProperty]);
+    setTradeModal({ open: true, target: p });
+    resetTradeFields();
+  };
+
+  const calculateFavorability = useCallback(
+    (trade: any) => {
+      const offerValue =
+        trade.offer_properties.reduce(
+          (sum: number, id: number) =>
+            sum + (properties.find((p) => p.id === id)?.price || 0),
+          0
+        ) + (trade.offer_amount || 0);
+
+      const requestValue =
+        trade.requested_properties.reduce(
+          (sum: number, id: number) =>
+            sum + (properties.find((p) => p.id === id)?.price || 0),
+          0
+        ) + (trade.requested_amount || 0);
+
+      if (requestValue === 0) return 100;
+      const ratio = ((offerValue - requestValue) / requestValue) * 100;
+      return Math.min(100, Math.max(-100, Math.round(ratio)));
+    },
+    [properties]
+  );
+
+  const calculateAiFavorability = useCallback(
+    (trade: any) => {
+      const aiGetsValue =
+        (trade.offer_amount || 0) +
+        trade.offer_properties.reduce(
+          (sum: number, id: number) =>
+            sum + (properties.find((p) => p.id === id)?.price || 0),
+          0
+        );
+
+      const aiGivesValue =
+        (trade.requested_amount || 0) +
+        trade.requested_properties.reduce(
+          (sum: number, id: number) =>
+            sum + (properties.find((p) => p.id === id)?.price || 0),
+          0
+        );
+
+      if (aiGivesValue === 0) return 100;
+      const ratio = ((aiGetsValue - aiGivesValue) / aiGivesValue) * 100;
+      return Math.min(100, Math.max(-100, Math.round(ratio)));
+    },
+    [properties]
+  );
+
+  const fetchTrades = useCallback(async () => {
+    if (!me || !game?.id) return;
+    try {
+      const [_initiated, _incoming] = await Promise.all([
+        apiClient.get<ApiResponse<any[]>>(`/game-trade-requests/my/${game.id}/player/${me.user_id}`),
+        apiClient.get<ApiResponse<any[]>>(`/game-trade-requests/incoming/${game.id}/player/${me.user_id}`),
+      ]);
+
+      const initiated = _initiated.data || [];
+      const incoming = _incoming.data || [];
+
+      setOpenTrades(initiated);
+      setTradeRequests(incoming);
+
+      const pendingAiTrades = incoming.filter((t: any) => {
+        if (t.status !== "pending") return false;
+        if (processedAiTradeIds.current.has(t.id)) return false;
+
+        const fromPlayer = game.players.find((p: Player) => p.user_id === t.player_id);
+        const username = (fromPlayer?.username || "").toLowerCase();
+        const isAI =
+          username.includes("ai_") ||
+          username.includes("bot") ||
+          username.includes("computer");
+
+        return isAI;
+      });
+
+      if (pendingAiTrades.length > 0) {
+        const trade = pendingAiTrades[0];
+        setAiTradePopup(trade);
+        processedAiTradeIds.current.add(trade.id);
+      }
+    } catch (err) {
+      console.error("Error loading trades:", err);
+      toast.error("Failed to load trades");
+    }
+  }, [me, game?.id, game.players]);
+
+
+ useEffect(() => {
+    if (!me || !game?.id) return;
+    let isFetching = false;
+    let interval: NodeJS.Timeout;
+
+    const startPolling = async () => {
+      await fetchTrades();
+      interval = setInterval(async () => {
+        if (isFetching) return;
+        isFetching = true;
+        try {
+          await fetchTrades();
+        } finally {
+          isFetching = false;
+        }
+      }, 5000);
+    };
+
+    startPolling();
+    return () => clearInterval(interval);
+  }, [fetchTrades]);
+
+ const handleCreateTrade = async () => {
+    if (!me || !tradeModal.target) return;
+
+    const targetPlayer = tradeModal.target;
+    const username = (targetPlayer.username || "").toLowerCase();
+    const isAI = username.includes("ai_") || username.includes("bot") || username.includes("computer");
+
+    try {
+      const payload = {
+        game_id: game.id,
+        player_id: me.user_id,
+        target_player_id: targetPlayer.user_id,
+        offer_properties: offerProperties,
+        offer_amount: offerCash,
+        requested_properties: requestProperties,
+        requested_amount: requestCash,
+        status: "pending",
+      };
+
+      const res = await apiClient.post<ApiResponse<{ id?: number }>>("/game-trade-requests", payload);
+
+      if (res.success) {
+        toast.success("Trade sent successfully!");
+        setTradeModal({ open: false, target: null });
+        resetTradeFields();
+        fetchTrades();
+
+        if (isAI) {
+          const sentTrade = {
+            ...payload,
+            id: res.data?.id || Date.now(),
+          };
+
+          const favorability = calculateAiFavorability(sentTrade);
+
+          let decision: "accepted" | "declined" = "declined";
+          let remark = "";
+
+          if (favorability >= 30) {
+            decision = "accepted";
+            remark = "This is a fantastic deal! 🤖";
+          } else if (favorability >= 10) {
+            decision = Math.random() < 0.7 ? "accepted" : "declined";
+            remark = decision === "accepted" ? "Fair enough, I'll take it." : "Not quite good enough.";
+          } else if (favorability >= 0) {
+            decision = Math.random() < 0.3 ? "accepted" : "declined";
+            remark = decision === "accepted" ? "Okay, deal." : "Nah, too weak.";
+          } else {
+            remark = "This deal is terrible for me! 😤";
+          }
+
+          if (decision === "accepted") {
+            try {
+              await apiClient.post("/game-trade-requests/accept", { id: sentTrade.id });
+              toast.success("AI accepted your trade instantly! 🎉");
+              fetchTrades();
+            } catch (err) {
+              console.error("Auto-accept failed", err);
+            }
+          }
+
+          setAiResponsePopup({
+            trade: sentTrade,
+            favorability,
+            decision,
+            remark,
+          });
+        }
+      } else {
+        toast.error(res.message || "Failed to create trade");
+      }
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to create trade");
+    }
+  };
+ 
+  const handleTradeAction = async (id: number, action: "accepted" | "declined" | "counter") => {
+    try {
+      if (action === "counter") {
+        const trade = tradeRequests.find((t) => t.id === id);
+        if (trade) {
+          setCounterModal({ open: true, trade });
+          setOfferProperties(trade.requested_properties || []);
+          setRequestProperties(trade.offer_properties || []);
+          setOfferCash(trade.requested_amount || 0);
+          setRequestCash(trade.offer_amount || 0);
+        }
+        return;
+      }
+      const res = await apiClient.post<ApiResponse>(
+        `/game-trade-requests/${action === "accepted" ? "accept" : "decline"}`,
+        { id }
+      );
+      if (res.success) {
+        toast.success(`Trade ${action}`);
+        setAiTradePopup(null);
+        fetchTrades();
+      } else {
+        toast.error("Failed to update trade");
+      }
+    } catch (error) {
+      toast.error("Failed to update trade");
+    }
+  };
+
+  const submitCounterTrade = async () => {
+    if (!me || !counterModal.trade) return;
+    try {
+      const payload = {
+        offer_properties: offerProperties,
+        offer_amount: offerCash,
+        requested_properties: requestProperties,
+        requested_amount: requestCash,
+        status: "counter",
+      };
+      const res = await apiClient.put<ApiResponse>(`/game-trade-requests/${counterModal.trade.id}`, payload);
+      if (res.success) {
+        toast.success("Counter offer sent");
+        setCounterModal({ open: false, trade: null });
+        resetTradeFields();
+        fetchTrades();
+      } else {
+        toast.error("Failed to send counter trade");
+      }
+    } catch (error) {
+      toast.error("Failed to send counter trade");
+    }
+  };
+
+ const handleDevelopment = async (id: number) => {
+    if (!isNext || !me) return;
+    try {
+      const res = await apiClient.post<ApiResponse>("/game-properties/development", {
+        game_id: game.id,
+        user_id: me.user_id,
+        property_id: id,
+      });
+      if (res.success) toast.success("Property developed successfully");
+      else toast.error(res.message ?? "Failed to develop property");
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to develop property");
+    }
+  };
+
+ const handleDowngrade = async (id: number) => {
+    if (!isNext || !me) return;
+    try {
+      const res = await apiClient.post<ApiResponse>("/game-properties/downgrade", {
+        game_id: game.id,
+        user_id: me.user_id,
+        property_id: id,
+      });
+      if (res.success) toast.success("Property downgraded successfully");
+      else toast.error(res.message ?? "Failed to downgrade property");
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to downgrade property");
+    }
+  };
+
+   const handleMortgage = async (id: number) => {
+    if (!isNext || !me) return;
+    try {
+      const res = await apiClient.post<ApiResponse>("/game-properties/mortgage", {
+        game_id: game.id,
+        user_id: me.user_id,
+        property_id: id,
+      });
+      if (res.success) toast.success("Property mortgaged successfully");
+      else toast.error(res.message ?? "Failed to mortgage property");
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to mortgage property");
+    }
+  };
+
+  const handleUnmortgage = async (id: number) => {
+    if (!isNext || !me) return;
+    try {
+      const res = await apiClient.post<ApiResponse>("/game-properties/unmortgage", {
+        game_id: game.id,
+        user_id: me.user_id,
+        property_id: id,
+      });
+      if (res.success) toast.success("Property unmortgaged successfully");
+      else toast.error(res.message ?? "Failed to unmortgage property");
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to unmortgage property");
+    }
+  };
 
   return (
-    <div className="w-full min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-cyan-900 text-white flex flex-col items-center justify-start relative overflow-hidden">
-      <div ref={boardRef} className="w-full max-w-[95vw] max-h-[60vh] overflow-auto touch-pinch-zoom touch-pan-x touch-pan-y aspect-square relative shadow-2xl shadow-cyan-500/10 mt-4">
-        <div className="grid grid-cols-11 grid-rows-11 w-full h-full gap-[1px] box-border scale-90 sm:scale-100">
-          <div className="col-start-2 col-span-9 row-start-2 row-span-9 bg-[#010F10] flex flex-col justify-center items-center p-2 relative overflow-hidden">
-            <AnimatePresence>
-              {isRolling && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  className="absolute inset-0 flex items-center justify-center gap-8 z-20 pointer-events-none"
-                >
-                  <motion.div
-                    animate={{ rotateX: [0, 360, 720, 1080], rotateY: [0, 360, -360, 720] }}
-                    transition={{ duration: 0.8, ease: "easeOut" }}
-                    className="relative w-20 h-20 bg-white rounded-xl shadow-2xl border-2 border-gray-800"
-                    style={{ boxShadow: "0 15px 30px rgba(0,0,0,0.7), inset 0 5px 10px rgba(255,255,255,0.5)" }}
-                  >
-                    {roll ? <DiceFace value={roll.die1} /> : <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.3, repeat: Infinity, ease: "linear" }} className="flex h-full items-center justify-center text-4xl font-bold text-gray-400">?</motion.div>}
-                  </motion.div>
-                  <motion.div
-                    animate={{ rotateX: [0, -720, 360, 1080], rotateY: [0, -360, 720, -360] }}
-                    transition={{ duration: 0.8, ease: "easeOut", delay: 0.1 }}
-                    className="relative w-20 h-20 bg-white rounded-xl shadow-2xl border-2 border-gray-800"
-                    style={{ boxShadow: "0 15px 30px rgba(0,0,0,0.7), inset 0 5px 10px rgba(255,255,255,0.5)" }}
-                  >
-                    {roll ? <DiceFace value={roll.die2} /> : <motion.div animate={{ rotate: -360 }} transition={{ duration: 0.3, repeat: Infinity, ease: "linear" }} className="flex h-full items-center justify-center text-4xl font-bold text-gray-400">?</motion.div>}
-                  </motion.div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+    <aside className="w-full h-full bg-gradient-to-b from-[#0a0e17] to-[#1a0033] overflow-y-auto relative">
+      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-pink-500 via-cyan-400 to-purple-600 shadow-lg shadow-cyan-400/80" />
+      <div className="p-3 space-y-4">
+        <motion.h2
+          animate={{ textShadow: ["0 0 10px #0ff", "0 0 20px #0ff", "0 0 10px #0ff"] }}
+          transition={{ duration: 2, repeat: Infinity }}
+          className="text-xl font-bold text-cyan-300 text-center tracking-widest"
+        >
+          PLAYERS
+        </motion.h2>
 
-            {roll && !isRolling && (
-              <motion.div
-                initial={{ scale: 0, y: 50 }}
-                animate={{ scale: 1, y: 0 }}
-                className="flex items-center gap-4 text-5xl font-bold mb-2"
-              >
-                <span className="text-cyan-400 drop-shadow-2xl">{roll.die1}</span>
-                <span className="text-white text-4xl">+</span>
-                <span className="text-pink-400 drop-shadow-2xl">{roll.die2}</span>
-                <span className="text-white mx-2 text-4xl">=</span>
-                <span className="text-yellow-400 text-6xl drop-shadow-2xl">{roll.total}</span>
-              </motion.div>
-            )}
+        {sortedPlayers.map((p: Player) => {
+          const isMe = p.address?.toLowerCase() === address?.toLowerCase();
+          const isTurn = p.user_id === game.next_player_id;
+          const canTrade = isNext && !p.in_jail && !isMe;
+          const displayName = p.username || p.address?.slice(0, 6) || "Player";
+          const isAI = displayName.toLowerCase().includes("ai_") || displayName.toLowerCase().includes("bot");
 
-            <h1 className="text-2xl font-bold text-[#F0F7F7] font-orbitron text-center mb-4 z-10">
-              Tycoon
-            </h1>
-
-            {isAITurn && (
-              <div className="mt-2 text-center z-10">
-                <motion.h2
-                  className="text-lg font-bold text-pink-300 mb-2"
-                  animate={{ opacity: [0.5, 1, 0.5], scale: [1, 1.05, 1] }}
-                  transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-                >
-                  {currentPlayer?.username} is playing…
-                </motion.h2>
-                {buyPrompted && buyScore !== null && (
-                  <p className="text-sm text-yellow-300 font-bold">
-                    Buy Confidence: {buyScore}%
-                  </p>
-                )}
-                <div className="flex justify-center mt-2">
-                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-cyan-400"></div>
-                </div>
-                <p className="text-pink-200 text-xs italic mt-2">
-                  {currentPlayer?.username}• Decides automatically
-                </p>
-              </div>
-            )}
-          </div>
-
-          {properties.map((square) => {
-            const playersHere = playersByPosition.get(square.id) ?? [];
-            const devLevel = developmentStage(square.id);
-
-            return (
-              <motion.div
-                key={square.id}
-                data-position={square.id}
-                style={{
-                  gridRowStart: square.grid_row,
-                  gridColumnStart: square.grid_col,
-                }}
-                className="w-full h-full p-[1px] relative box-border group hover:z-10 transition-transform duration-200"
-                whileHover={{ scale: 1.5, zIndex: 50 }}
-                transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                onClick={() => setFocusedProperty(square)}
-              >
-                <div className={`w-full h-full transform group-hover:scale-150 ${isTopHalf(square) ? 'origin-top group-hover:origin-bottom group-hover:translate-y-[50px]' : ''} group-hover:shadow-lg group-hover:shadow-cyan-500/50 transition-transform duration-200 rounded-sm overflow-hidden bg-black/20 p-0.5`}>
-                  {square.type === "property" && <PropertyCardMobile square={square} owner={propertyOwner(square.id)} />}
-                  {["community_chest", "chance", "luxury_tax", "income_tax"].includes(square.type) && <SpecialCard square={square} />}
-                  {square.type === "corner" && <CornerCard square={square} />}
-
-                  {square.type === "property" && devLevel > 0 && (
-                    <div className="absolute top-0.5 right-0.5 bg-yellow-500 text-black text-xxs font-bold rounded px-0.5 z-20 flex items-center gap-0.5">
-                      {devLevel === 5 ? '🏨' : `🏠 ${devLevel}`}
-                    </div>
-                  )}
-
-                  <div className="absolute bottom-0.5 left-0.5 flex flex-col gap-1 z-10">
-                    {playersHere.map((p) => {
-                      const isCurrentPlayer = p.user_id === game.next_player_id;
-                      return (
-                        <motion.span
-                          key={p.user_id}
-                          title={`${p.username} (${p.balance})`}
-                          className={`text-lg border-2 rounded ${isCurrentPlayer ? 'border-cyan-300' : 'border-transparent'}`}
-                          initial={{ scale: 1 }}
-                          animate={{
-                            y: isCurrentPlayer ? [0, -4, 0] : [0, -2, 0],
-                            scale: isCurrentPlayer ? [1, 1.05, 1] : 1,
-                            rotate: isCurrentPlayer ? [0, 3, -3, 0] : 0,
-                          }}
-                          transition={{
-                            y: { duration: isCurrentPlayer ? 1.2 : 2, repeat: Infinity, ease: "easeInOut" },
-                            scale: { duration: isCurrentPlayer ? 1.2 : 0, repeat: Infinity, ease: "easeInOut" },
-                            rotate: { duration: isCurrentPlayer ? 1.5 : 0, repeat: Infinity, ease: "easeInOut" },
-                          }}
-                          whileHover={{ scale: 1.1, y: -1 }}
-                        >
-                          {getPlayerSymbol(p.symbol)}
-                        </motion.span>
-                      );
-                    })}
+          return (
+            <motion.div
+              key={p.user_id}
+              whileHover={{ scale: 1.02 }}
+              className={`p-3 rounded-xl border-2 transition-all ${
+                isTurn
+                  ? "border-cyan-400 bg-cyan-900/40 shadow-lg shadow-cyan-400/60"
+                  : "border-purple-800 bg-purple-900/20"
+              }`}
+            >
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">{getPlayerSymbol(p.symbol)}</span>
+                  <div className="font-bold text-cyan-200 text-sm">
+                    {displayName}
+                    {isMe && " (YOU)"}
+                    {isAI && " (AI)"}
                   </div>
                 </div>
-              </motion.div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="w-full max-w-[95vw] flex flex-col items-center p-4 gap-4">
-        {isMyTurn && !currentPlayer?.rolls ? (
-          <button
-            onClick={() => ROLL_DICE(false)}
-            disabled={isRolling}
-            className="w-[80vw] py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold text-lg rounded-full hover:from-green-600 hover:to-emerald-700 transform hover:scale-105 active:scale-95 transition-all disabled:opacity-50 shadow-xl"
-          >
-            {isRolling ? "Rolling..." : "Roll Dice"}
-          </button>
-        ) : null}
-
-        <div className="w-full bg-gray-900/95 backdrop-blur-md rounded-xl border border-cyan-500/30 shadow-2xl overflow-hidden">
-          <button 
-            onClick={() => setShowLog(!showLog)}
-            className="w-full p-3 border-b border-cyan-500/20 bg-gray-800/80 flex justify-between items-center"
-          >
-            <h3 className="text-sm font-bold text-cyan-300 tracking-wider">Action Log</h3>
-            <span>{showLog ? '▲' : '▼'}</span>
-          </button>
-          {showLog && (
-            <div ref={logRef} className="max-h-32 overflow-y-auto px-3 py-2 space-y-1.5 scrollbar-thin scrollbar-thumb-cyan-600">
-              {(!game.history || game.history.length === 0) ? (
-                <p className="text-center text-gray-500 text-xs italic py-4">No actions yet</p>
-              ) : (
-                game.history.slice(-5).map((h, i) => (
-                  <motion.p key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-xs text-gray-300">
-                    <span className="font-medium text-cyan-200">{h.player_name}</span> {h.comment}
-                    {h.rolled && <span className="text-cyan-400 font-bold ml-1">[Rolled {h.rolled}]</span>}
-                  </motion.p>
-                ))
+                <div className="text-base font-bold text-yellow-400">
+                  ${p.balance.toLocaleString()}
+                </div>
+              </div>
+              {canTrade && (
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => startTrade(p)}
+                  className="mt-2 w-full py-2 bg-gradient-to-r from-pink-600 to-purple-600 rounded-lg font-bold text-white shadow-lg text-sm"
+                >
+                  TRADE
+                </motion.button>
               )}
-            </div>
-          )}
+            </motion.div>
+          );
+        })}
+
+        <div className="border-t-4 border-purple-600 pt-3">
+          <button
+            onClick={() => setShowEmpire((v) => !v)}
+            className="w-full text-lg font-bold text-purple-300 flex justify-between items-center"
+          >
+            <span>MY EMPIRE</span>
+            <motion.span
+              animate={{ rotate: showEmpire ? 180 : 0 }}
+              transition={{ duration: 0.25 }}
+              className="text-2xl text-cyan-400"
+            >
+              ▼
+            </motion.span>
+          </button>
+          <AnimatePresence>
+            {showEmpire && (
+              <motion.div
+                initial={{ height: 0 }}
+                animate={{ height: "auto" }}
+                exit={{ height: 0 }}
+                className="overflow-hidden mt-2 grid grid-cols-2 gap-2"
+              >
+                {my_properties.map((prop, i) => (
+                  <motion.div
+                    key={prop.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    onClick={() => isNext && setSelectedProperty(prop)}
+                    whileHover={{ scale: 1.05 }}
+                    className="bg-black/60 border-2 border-cyan-600 rounded-lg p-2 cursor-pointer shadow-md"
+                  >
+                    {prop.color && <div className="h-2 rounded" style={{ backgroundColor: prop.color }} />}
+                    <div className="mt-1 text-xs font-bold text-cyan-200 truncate">{prop.name}</div>
+                    <div className="text-xxs text-green-400">Rent: ${rentPrice(prop.id)}</div>
+                    {isMortgaged(prop.id) && (
+                      <div className="text-red-500 text-xxs mt-1 font-bold animate-pulse">MORTGAGED</div>
+                    )}
+                  </motion.div>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        <div className="border-t-4 border-pink-600 pt-3">
+          <button
+            onClick={() => setShowTrades((v) => !v)}
+            className="w-full text-lg font-bold text-pink-300 flex justify-between items-center"
+          >
+            <span>TRADES {tradeRequests.length > 0 && `(${tradeRequests.length} pending)`}</span>
+            <motion.span animate={{ rotate: showTrades ? 180 : 0 }} className="text-2xl text-cyan-400">
+              ▼
+            </motion.span>
+          </button>
+          <AnimatePresence>
+            {showTrades && (openTrades.length > 0 || tradeRequests.length > 0) && (
+              <motion.div
+                initial={{ height: 0 }}
+                animate={{ height: "auto" }}
+                exit={{ height: 0 }}
+                className="overflow-hidden mt-3 space-y-3"
+              >
+                {tradeRequests.map((trade: any) => {
+                  const from = game.players.find((p: Player) => p.user_id === trade.player_id);
+                  const offerProps = properties.filter((p: Property) => trade.offer_properties?.includes(p.id));
+                  const requestProps = properties.filter((p: Property) => trade.requested_properties?.includes(p.id));
+
+                  return (
+                    <motion.div
+                      key={trade.id}
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="bg-gradient-to-br from-purple-900/60 to-cyan-900/40 border-2 border-cyan-500 rounded-xl p-4"
+                    >
+                      <div className="font-bold text-cyan-300 mb-2 text-sm">
+                        From {from?.username || "Player"}
+                      </div>
+                      <div className="text-xs space-y-1 mb-3">
+                        <div className="text-green-400">
+                          Gives: {offerProps.length ? offerProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.offer_amount || 0}
+                        </div>
+                        <div className="text-red-400">
+                          Wants: {requestProps.length ? requestProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.requested_amount || 0}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <button
+                          onClick={() => handleTradeAction(trade.id, "accepted")}
+                          className="py-1.5 bg-green-600 rounded text-xs font-bold text-white hover:bg-green-500"
+                        >
+                          Accept
+                        </button>
+                        <button
+                          onClick={() => handleTradeAction(trade.id, "declined")}
+                          className="py-1.5 bg-red-600 rounded text-xs font-bold text-white hover:bg-red-500"
+                        >
+                          Decline
+                        </button>
+                        <button
+                          onClick={() => handleTradeAction(trade.id, "counter")}
+                          className="py-1.5 bg-yellow-600 rounded text-xs font-bold text-black hover:bg-yellow-500"
+                        >
+                          Counter
+                        </button>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
+      {/* Property Action Modal */}
       <AnimatePresence>
-        {isMyTurn && buyPrompted && currentProperty && (
-          <motion.div
-            initial={{ y: "100%" }}
-            animate={{ y: 0 }}
-            exit={{ y: "100%" }}
-            transition={{ type: "spring", damping: 20 }}
-            className="fixed bottom-0 left-0 right-0 bg-gray-900/95 backdrop-blur-md p-4 rounded-t-2xl shadow-2xl z-[60] flex flex-col items-center gap-4"
-          >
-            <h3 className="text-lg font-bold text-white">Buy {currentProperty.name}?</h3>
-            <p className="text-sm text-gray-300">Price: ${currentProperty.price}</p>
-            <div className="flex gap-4 w-full justify-center">
-              <button
-                onClick={BUY_PROPERTY}
-                className="flex-1 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold rounded-full hover:from-green-600 hover:to-emerald-700 transform hover:scale-105 active:scale-95 transition-all shadow-lg"
-              >
-                Buy
-              </button>
-              <button
-                onClick={() => {
-                  showToast("Skipped purchase");
-                  setBuyPrompted(false);
-                  setTimeout(END_TURN, 800);
-                }}
-                className="flex-1 py-3 bg-gray-600 text-white font-bold rounded-full hover:bg-gray-700 transform hover:scale-105 active:scale-95 transition-all shadow-lg"
-              >
-                Skip
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {focusedProperty && (
+        {isNext && selectedProperty && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm px-4"
-            onClick={() => setFocusedProperty(null)}
+            className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-50 p-4"
+            onClick={() => setSelectedProperty(null)}
           >
             <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.8, opacity: 0 }}
-              transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="relative max-w-lg w-full bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl shadow-2xl border border-cyan-500/40 overflow-hidden"
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
               onClick={(e) => e.stopPropagation()}
+              className="relative bg-gradient-to-br from-purple-900 via-black to-cyan-900 rounded-2xl border-4 border-cyan-400 shadow-2xl p-6 w-full max-w-xs"
             >
               <button
-                onClick={() => setFocusedProperty(null)}
-                className="absolute top-3 right-3 z-10 w-10 h-10 rounded-full bg-black/50 flex items-center justify-center text-2xl hover:bg-black/70 transition"
+                onClick={() => setSelectedProperty(null)}
+                className="absolute top-3 right-3 text-2xl text-red-400 hover:text-red-300 transition"
               >
-                ×
+                X
               </button>
-
-              <div className="p-6 pt-12">
-                {["community_chest", "chance", "luxury_tax", "income_tax"].includes(focusedProperty.type) && (
-                  <SpecialCard square={focusedProperty} />
-                )}
-                {focusedProperty.type === "corner" && (
-                  <CornerCard square={focusedProperty} />
-                )}
-                {focusedProperty.type === "property" && (
-                  <PropertyCardMobile square={focusedProperty} owner={propertyOwner(focusedProperty.id)} />
-                )}
-              </div>
-
-              <div className="px-6 pb-6 text-center space-y-2">
-                <p className="text-2xl font-bold">{focusedProperty.name}</p>
-                {propertyOwner(focusedProperty.id) ? (
-                  <p className="text-lg text-cyan-300">
-                    Owner: {propertyOwner(focusedProperty.id)}
-                  </p>
-                ) : (
-                  <p className="text-lg text-gray-400">Available for purchase</p>
-                )}
-                {focusedProperty.price && (
-                  <p className="text-lg">Price: <span className="text-yellow-400 font-bold">${focusedProperty.price}</span></p>
-                )}
-                {focusedProperty.type === "property" && developmentStage(focusedProperty.id) > 0 && (
-                  <p className="text-lg">
-                    Development: {developmentStage(focusedProperty.id) === 5 ? "Hotel" : `${developmentStage(focusedProperty.id)} Houses`}
-                  </p>
-                )}
+              <h3 className="text-2xl font-bold text-cyan-300 text-center mb-6">{selectedProperty.name}</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <button onClick={() => { handleDevelopment(selectedProperty.id); setSelectedProperty(null); }} className="py-3 bg-gradient-to-r from-green-600 to-emerald-700 rounded-xl font-bold text-white shadow-lg text-sm">BUILD</button>
+                <button onClick={() => { handleDowngrade(selectedProperty.id); setSelectedProperty(null); }} className="py-3 bg-gradient-to-r from-orange-600 to-red-700 rounded-xl font-bold text-white shadow-lg text-sm">SELL</button>
+                <button onClick={() => { handleMortgage(selectedProperty.id); setSelectedProperty(null); }} className="py-3 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-xl font-bold text-white shadow-lg text-sm">MORTGAGE</button>
+                <button onClick={() => { handleUnmortgage(selectedProperty.id); setSelectedProperty(null); }} className="py-3 bg-gradient-to-r from-purple-600 to-pink-700 rounded-xl font-bold text-white shadow-lg text-sm">REDEEM</button>
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <Toaster
-        position="top-center"
-        reverseOrder={false}
-        gutter={12}
-        containerClassName="z-50"
-        toastOptions={{
-          duration: 3000,
-          style: {
-            background: "rgba(15, 23, 42, 0.95)",
-            color: "#fff",
-            border: "1px solid rgba(34, 211, 238, 0.3)",
-            borderRadius: "12px",
-            padding: "8px 16px",
-            fontSize: "14px",
-            fontWeight: "600",
-            boxShadow: "0 10px 30px rgba(0, 255, 255, 0.15)",
-            backdropFilter: "blur(10px)",
-          },
-          success: { icon: "✔", style: { borderColor: "#10b981" } },
-          error: { icon: "✖", style: { borderColor: "#ef4444" } },
-        }}
+      {/* AI Trade Popup */}
+      <AnimatePresence>
+        {aiTradePopup && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-50 p-4"
+            onClick={() => setAiTradePopup(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative bg-gradient-to-br from-cyan-900 via-purple-900 to-pink-900 rounded-2xl border-4 border-cyan-400 shadow-2xl p-6 w-full max-w-sm"
+            >
+              <button
+                onClick={() => setAiTradePopup(null)}
+                className="absolute top-3 right-3 text-2xl text-red-300 hover:text-red-200 transition"
+              >
+                X
+              </button>
+              <h3 className="text-2xl font-bold text-cyan-300 text-center mb-5">
+                🤖 AI Offer!
+              </h3>
+              <div className="text-center mb-6 bg-black/50 rounded-xl py-4 px-6">
+                <p className="text-lg text-white mb-1">Deal rating:</p>
+                <span className={`text-4xl font-bold ${calculateFavorability(aiTradePopup) >= 0 ? "text-green-400" : "text-red-400"}`}>
+                  {calculateFavorability(aiTradePopup) >= 0 ? "+" : ""}
+                  {calculateFavorability(aiTradePopup)}%
+                </span>
+                <p className="text-sm text-gray-300 mt-2">
+                  {calculateFavorability(aiTradePopup) >= 30 ? "🟢 Great!" : calculateFavorability(aiTradePopup) >= 0 ? "🟡 Okay" : "🔴 Bad"}
+                </p>
+              </div>
+              <div className="space-y-3 text-sm mb-6">
+                <div className="bg-green-900/60 rounded-lg p-3">
+                  <span className="font-bold text-green-300">Gives:</span> {properties.filter((p) => aiTradePopup.offer_properties?.includes(p.id)).map((p) => p.name).join(", ") || "nothing"} {aiTradePopup.offer_amount > 0 && `+ $${aiTradePopup.offer_amount}`}
+                </div>
+                <div className="bg-red-900/60 rounded-lg p-3">
+                  <span className="font-bold text-red-300">Wants:</span> {properties.filter((p) => aiTradePopup.requested_properties?.includes(p.id)).map((p) => p.name).join(", ") || "nothing"} {aiTradePopup.requested_amount > 0 && `+ $${aiTradePopup.requested_amount}`}
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <button onClick={() => { handleTradeAction(aiTradePopup.id, "accepted"); setAiTradePopup(null); }} className="py-3 bg-green-600 rounded-xl font-bold text-white text-sm">ACCEPT</button>
+                <button onClick={() => { handleTradeAction(aiTradePopup.id, "declined"); setAiTradePopup(null); }} className="py-3 bg-red-600 rounded-xl font-bold text-white text-sm">DECLINE</button>
+                <button onClick={() => { handleTradeAction(aiTradePopup.id, "counter"); setAiTradePopup(null); }} className="py-3 bg-yellow-600 rounded-xl font-bold text-black text-sm">COUNTER</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* AI Response Popup */}
+      <AnimatePresence>
+        {aiResponsePopup && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-50 p-4"
+            onClick={() => setAiResponsePopup(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative bg-gradient-to-br from-purple-900 via-indigo-900 to-cyan-900 rounded-2xl border-4 border-yellow-400 shadow-2xl p-6 w-full max-w-sm"
+            >
+              <button
+                onClick={() => setAiResponsePopup(null)}
+                className="absolute top-3 right-3 text-2xl text-red-300 hover:text-red-200 transition"
+              >
+                X
+              </button>
+              <h3 className="text-2xl font-bold text-yellow-300 text-center mb-5">
+                🤖 AI Responds
+              </h3>
+              <div className="text-center mb-6 bg-black/50 rounded-xl py-4 px-6">
+                <p className="text-lg text-white mb-1">Your offer was</p>
+                <span className={`text-4xl font-bold ${aiResponsePopup.favorability >= 0 ? "text-green-400" : "text-red-400"}`}>
+                  {aiResponsePopup.favorability >= 0 ? "+" : ""}
+                  {aiResponsePopup.favorability}%
+                </span>
+                <p className="text-lg text-white mt-2">for the AI</p>
+              </div>
+              <div className="text-center mb-6 text-3xl font-bold">
+                {aiResponsePopup.decision === "accepted" ? "✅ ACCEPTED!" : "❌ DECLINED"}
+              </div>
+              <p className="text-center text-sm italic text-gray-300 mb-6">
+                &quot;{aiResponsePopup.remark}&quot;
+              </p>
+              <button
+                onClick={() => setAiResponsePopup(null)}
+                className="w-full py-3 bg-gradient-to-r from-yellow-500 to-orange-600 rounded-xl font-bold text-black text-lg"
+              >
+                CLOSE
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Mobile-Optimized Trade Modal (Single Column) */}
+      <TradeModal
+        open={tradeModal.open}
+        title="CREATE TRADE"
+        onClose={() => { setTradeModal({ open: false, target: null }); resetTradeFields(); }}
+        onSubmit={handleCreateTrade}
+        my_properties={my_properties}
+        properties={properties}
+        game_properties={game_properties}
+        offerProperties={offerProperties}
+        requestProperties={requestProperties}
+        setOfferProperties={setOfferProperties}
+        setRequestProperties={setRequestProperties}
+        offerCash={offerCash}
+        requestCash={requestCash}
+        setOfferCash={setOfferCash}
+        setRequestCash={setRequestCash}
+        toggleSelect={toggleSelect}
+        targetPlayerAddress={tradeModal.target?.address}
       />
+
+      <TradeModal
+        open={counterModal.open}
+        title="COUNTER OFFER"
+        onClose={() => { setCounterModal({ open: false, trade: null }); resetTradeFields(); }}
+        onSubmit={submitCounterTrade}
+        my_properties={my_properties}
+        properties={properties}
+        game_properties={game_properties}
+        offerProperties={offerProperties}
+        requestProperties={requestProperties}
+        setOfferProperties={setOfferProperties}
+        setRequestProperties={setRequestProperties}
+        offerCash={offerCash}
+        requestCash={requestCash}
+        setOfferCash={setOfferCash}
+        setRequestCash={setRequestCash}
+        toggleSelect={toggleSelect}
+        targetPlayerAddress={game.players.find(p => p.user_id === counterModal.trade?.target_player_id)?.address}
+      />
+    </aside>
+  );
+}
+
+function TradeModal({
+  open,
+  title,
+  onClose,
+  onSubmit,
+  my_properties,
+  properties,
+  game_properties,
+  offerProperties,
+  requestProperties,
+  setOfferProperties,
+  setRequestProperties,
+  offerCash,
+  requestCash,
+  setOfferCash,
+  setRequestCash,
+  toggleSelect,
+  targetPlayerAddress,
+}: any) {
+  const targetProps = useMemo(() => {
+    if (!targetPlayerAddress) return [];
+    return properties.filter((p: Property) =>
+      game_properties.some((gp: GameProperty) => gp.property_id === p.id && gp.address === targetPlayerAddress)
+    );
+  }, [properties, game_properties, targetPlayerAddress]);
+
+  if (!open) return null;
+
+  const PropertyCard = ({ prop, isSelected, onClick }: { prop: Property; isSelected: boolean; onClick: () => void }) => (
+    <div
+      onClick={onClick}
+      className={`p-3 rounded-lg border-2 cursor-pointer transition-all flex flex-col gap-2 relative overflow-hidden ${
+        isSelected
+          ? "border-cyan-400 bg-cyan-900/70 shadow-lg shadow-cyan-400/60"
+          : "border-gray-700 hover:border-gray-500 bg-black/40"
+      }`}
+    >
+      {isSelected && <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 animate-pulse" />}
+      {prop.color && (
+        <div className="h-6 rounded-t-md -m-3 -mt-3 mb-2" style={{ backgroundColor: prop.color }} />
+      )}
+      <div className="text-xs font-bold text-cyan-200 text-center leading-tight relative z-10">{prop.name}</div>
     </div>
   );
-};
 
-export default MobileGameLayout;
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/95 backdrop-blur-md flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.95 }}
+        animate={{ scale: 1 }}
+        onClick={(e) => e.stopPropagation()}
+        className="relative bg-gradient-to-br from-purple-950 via-black to-cyan-950 rounded-2xl border-4 border-cyan-500 shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto"
+      >
+        <button onClick={onClose} className="absolute top-4 right-4 text-3xl text-red-400 hover:text-red-300 transition z-10">
+          X
+        </button>
+
+        <h2 className="text-3xl font-bold text-cyan-300 text-center mb-8">{title}</h2>
+
+        {/* Single column layout */}
+        <div className="space-y-8">
+          <div>
+            <h3 className="text-2xl font-bold text-green-400 mb-4 text-center">YOU GIVE</h3>
+            <div className="grid grid-cols-3 gap-3">
+              {my_properties.map((p: Property) => (
+                <PropertyCard
+                  key={p.id}
+                  prop={p}
+                  isSelected={offerProperties.includes(p.id)}
+                  onClick={() => toggleSelect(p.id, offerProperties, setOfferProperties)}
+                />
+              ))}
+            </div>
+            <input
+              type="number"
+              placeholder="+$ CASH"
+              value={offerCash || ""}
+              onChange={(e) => setOfferCash(Math.max(0, Number(e.target.value) || 0))}
+              className="w-full mt-5 bg-black/60 border-2 border-green-500 rounded-lg px-4 py-4 text-green-400 font-bold text-2xl text-center placeholder-green-700"
+            />
+          </div>
+
+          <div>
+            <h3 className="text-2xl font-bold text-red-400 mb-4 text-center">YOU GET</h3>
+            <div className="grid grid-cols-3 gap-3">
+              {targetProps.length > 0 ? (
+                targetProps.map((p: Property) => (
+                  <PropertyCard
+                    key={p.id}
+                    prop={p}
+                    isSelected={requestProperties.includes(p.id)}
+                    onClick={() => toggleSelect(p.id, requestProperties, setRequestProperties)}
+                  />
+                ))
+              ) : (
+                <div className="col-span-3 text-center text-gray-500 py-8">
+                  No properties available
+                </div>
+              )}
+            </div>
+            <input
+              type="number"
+              placeholder="+$ CASH"
+              value={requestCash || ""}
+              onChange={(e) => setRequestCash(Math.max(0, Number(e.target.value) || 0))}
+              className="w-full mt-5 bg-black/60 border-2 border-red-500 rounded-lg px-4 py-4 text-red-400 font-bold text-2xl text-center placeholder-red-700"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-4 mt-10">
+          <button onClick={onClose} className="w-full py-4 bg-gray-800 rounded-xl font-bold text-2xl text-gray-300 hover:bg-gray-700 transition">
+            CANCEL
+          </button>
+          <button
+            onClick={onSubmit}
+            className="w-full py-4 bg-gradient-to-r from-cyan-500 to-purple-600 rounded-xl font-bold text-2xl text-white shadow-lg hover:shadow-cyan-500/50 transition"
+          >
+            SEND DEAL
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
