@@ -85,11 +85,11 @@ const ROLL_ANIMATION_MS = 1200;
    HELPERS
    ============================================ */
 
-const getDiceValues = (): { die1: number; die2: number; total: number } | null => {
+const getDiceValues = (): { die1: number; die2: number; total: number } => {
   const die1 = Math.floor(Math.random() * 6) + 1;
   const die2 = Math.floor(Math.random() * 6) + 1;
   const total = die1 + die2;
-  return total === 12 ? null : { die1, die2, total };
+  return { die1, die2, total };
 };
 
 const isTopHalf = (square: any) => {
@@ -122,7 +122,7 @@ function useSafeState<S>(initial: S) {
 }
 
 /* ============================================
-   GAME BOARD COMPONENT
+   DICE FACE
    ============================================ */
 
 const DiceFace = ({ value }: { value: number }) => {
@@ -152,6 +152,10 @@ const DiceFace = ({ value }: { value: number }) => {
   );
 };
 
+/* ============================================
+   GAME BOARD COMPONENT
+   ============================================ */
+
 const GameBoard = ({
   game,
   properties,
@@ -160,6 +164,7 @@ const GameBoard = ({
   me,
 }: GameProps) => {
   const { userData } = useStacks();
+  const address = userData?.addresses.stx[0].address || "";
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -168,11 +173,9 @@ const GameBoard = ({
   const [boardData] = useSafeState<Property[]>(properties ?? []);
   const [error, setError] = useSafeState<string | null>(null);
   const [isRolling, setIsRolling] = useSafeState(false);
-  const [rollAgain, setRollAgain] = useSafeState(false);
   const [roll, setRoll] = useSafeState<{ die1: number; die2: number; total: number } | null>(
     null
   );
-  const [pendingRoll, setPendingRoll] = useSafeState<number>(0);
   const [canRoll, setCanRoll] = useSafeState<boolean>(false);
   const [actionLock, setActionLock] = useSafeState<"ROLL" | "END" | null>(null);
   const [currentCard, setCurrentCard] = useSafeState<CardPopup | null>(null);
@@ -192,7 +195,6 @@ const GameBoard = ({
   const [currentAction, setCurrentAction] = useSafeState<string | null>(null);
   const [currentProperty, setCurrentProperty] = useSafeState<Property | null>(null);
   const [currentGameProperty, setCurrentGameProperty] = useSafeState<GameProperty | null>(null);
-  const [buyPrompted, setBuyPrompted] = useState(false);
   const isMyTurn = me?.user_id && game?.next_player_id === me.user_id;
 
   // Track last processed position to prevent multiple triggers
@@ -206,13 +208,14 @@ const GameBoard = ({
   /* ---------- Fetch Updated Game ---------- */
   const fetchUpdatedGame = useCallback(async () => {
     try {
-      const res = await apiClient.get<ApiResponse>(`/games/code/${game.code}`);
+      const res = await apiClient.get<ApiResponse<Game>>(`/games/code/${game.code}`);
+
       if (res.success) {
-        const gameData = res.data as Game;
-        if (gameData && Array.isArray((gameData as any).players)) {
+        const gameData = res.data;
+        if (gameData && Array.isArray(gameData.players)) {
           setPlayers((prev) => {
-            const changed = JSON.stringify(prev) !== JSON.stringify((gameData as any).players);
-            return changed ? (gameData as any).players : prev;
+            const changed = JSON.stringify(prev) !== JSON.stringify(gameData.players);
+            return changed ? gameData.players : prev;
           });
         }
         return gameData;
@@ -228,11 +231,12 @@ const GameBoard = ({
     if (!me?.user_id) return;
 
     try {
-      const res = await apiClient.post<ApiResponse>(
+      const res = await apiClient.post<ApiResponse<{ canRoll: boolean }>>(
         "/game-players/can-roll",
         { user_id: me.user_id, game_id: game.id }
       );
-      const allowed = Boolean(res?.data);
+
+      const allowed = Boolean(res.data?.canRoll);
       setCanRoll(allowed);
 
       if (allowed) toast.success("🎲 It's your turn — roll the dice!");
@@ -259,7 +263,6 @@ const GameBoard = ({
   useEffect(() => {
     if (!stableProperties.length || !me?.position || !game?.players) return;
 
-    // Only process if position has changed
     if (me.position === lastProcessedPosition.current) return;
 
     lastProcessedPosition.current = me.position;
@@ -283,19 +286,13 @@ const GameBoard = ({
 
     if (
       isMyTurn &&
-      !buyPrompted &&
       hasRolled &&
       isRolling === false &&
       roll !== null &&
-      action === "land" &&
+      ["land", "railway", "utility"].includes(action || "") &&
       !game_property
     ) {
       toast("💰 You can buy this property!", { icon: "🏠" });
-      setBuyPrompted(true);
-    }
-
-    if (!isMyTurn || roll === null || meInGame?.rolls === 0) {
-      setBuyPrompted(false);
     }
   }, [
     me?.position,
@@ -305,10 +302,10 @@ const GameBoard = ({
     isMyTurn,
     isRolling,
     roll,
+    me?.user_id,
     setCurrentProperty,
     setCurrentGameProperty,
     setCurrentAction,
-    buyPrompted,
   ]);
 
   // Extract real card message from action log
@@ -385,7 +382,7 @@ const GameBoard = ({
           game_id: game.id,
         });
 
-        if (!res?.success) throw new Error(res?.message || "Server rejected turn end.");
+        if (!res.success) throw new Error(res.message || "Server rejected turn end.");
 
         const updatedGame = await fetchUpdatedGame();
         if (updatedGame?.players) {
@@ -398,7 +395,7 @@ const GameBoard = ({
         forceRefetch();
       } catch (err: any) {
         console.error("END_TURN error:", err);
-        toast.error(err?.response?.data?.message || "Failed to end turn.");
+        toast.error(err?.message || "Failed to end turn.");
         forceRefetch();
       } finally {
         unlockAction();
@@ -412,19 +409,15 @@ const GameBoard = ({
     if (isRolling || actionLock || !lockAction("ROLL")) return;
 
     setError(null);
-    if (rollAgain) {
-      setPendingRoll(12);
-    }
-    setRollAgain(false);
     setIsRolling(true);
 
     try {
-      const res = await apiClient.post<ApiResponse>(
+      const res = await apiClient.post<ApiResponse<{ canRoll: boolean }>>(
         "/game-players/can-roll",
         { user_id: me?.user_id, game_id: game.id }
       );
 
-      const allowed = Boolean(res?.data);
+      const allowed = Boolean(res.data?.canRoll);
       if (!allowed) {
         toast.error("⏳ Not your turn! Wait for your turn to roll.");
         setIsRolling(false);
@@ -432,19 +425,12 @@ const GameBoard = ({
         return;
       }
 
-      // Animation delay
       setTimeout(async () => {
         const value = getDiceValues();
-        if (!value) {
-          setRollAgain(true);
-          setIsRolling(false);
-          unlockAction();
-          return;
-        }
 
         setRoll(value);
         const currentPos = me?.position ?? 0;
-        const newPosition = (currentPos + value.total + pendingRoll) % BOARD_SQUARES;
+        const newPosition = (currentPos + value.total) % BOARD_SQUARES;
 
         try {
           const updateResp = await apiClient.post<ApiResponse>(
@@ -453,29 +439,27 @@ const GameBoard = ({
               position: newPosition,
               user_id: me?.user_id,
               game_id: game.id,
-              rolled: value.total + pendingRoll,
-              is_double: value.die1 === value.die2,
+              rolled: value.total,
+              is_double: value.die1 === value.die2
             }
           );
 
-          if (!updateResp?.success) {
-            toast.error(updateResp?.message || "Unable to move from current position");
-          }
+          if (!updateResp.success) toast.error("Unable to move from current position");
 
-          setPendingRoll(0);
           const updatedGame = await fetchUpdatedGame();
           if (updatedGame?.players) {
             setPlayers(updatedGame.players);
           }
 
           setCanRoll(false);
-        } catch (err: any) {
+        } catch (err) {
           console.error("Persist move error:", err);
-          toast.error(err?.response?.data?.message || "Position update failed, syncing...");
+          toast.error("Position update failed, syncing...");
           forceRefetch();
         } finally {
           setIsRolling(false);
           unlockAction();
+          checkCanRoll();
         }
       }, ROLL_ANIMATION_MS);
     } catch (err) {
@@ -495,11 +479,12 @@ const GameBoard = ({
     game.id,
     setIsRolling,
     setPlayers,
-    setRollAgain,
     setRoll,
     fetchUpdatedGame,
     forceRefetch,
     setCanRoll,
+    checkCanRoll,
+    setError
   ]);
 
   /* ---------- Derived Data ---------- */
@@ -512,7 +497,6 @@ const GameBoard = ({
     });
     return map;
   }, [players]);
-
 
   const propertyOwner = (property_id: number) => {
     const gp = game_properties.find((gp) => gp.property_id === property_id);
@@ -540,7 +524,6 @@ const GameBoard = ({
   /* ---------- Activity Log Helpers ---------- */
   const logRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    // auto-scroll to bottom when history changes
     if (!logRef.current) return;
     logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [game.history]);
@@ -620,16 +603,14 @@ const GameBoard = ({
 
                     return (
                       <div className="flex gap-4 flex-wrap justify-center">
-                        {
-                          currentAction && ["land", "railway", "utility"].includes(currentAction) && !currentGameProperty && currentProperty && (
-                            <button
-                              onClick={BUY_PROPERTY}
-                              className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold rounded-full hover:from-green-600 hover:to-emerald-700 transform hover:scale-110 active:scale-95 transition-all shadow-lg"
-                            >
-                              Buy for ${currentProperty?.price}
-                            </button>
-                          )
-                        }
+                        {currentAction && ["land", "railway", "utility"].includes(currentAction) && !currentGameProperty && currentProperty && (
+                          <button
+                            onClick={BUY_PROPERTY}
+                            className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold rounded-full hover:from-green-600 hover:to-emerald-700 transform hover:scale-110 active:scale-95 transition-all shadow-lg"
+                          >
+                            Buy for ${currentProperty?.price}
+                          </button>
+                        )}
                         <button
                           onClick={() => END_TURN(me?.user_id)}
                           disabled={actionLock === "ROLL"}
@@ -654,8 +635,6 @@ const GameBoard = ({
                     </div>
                   </div>
                 )}
-
-                {rollAgain && <p className="text-center text-xs text-red-500">🎯 You rolled a double! Roll again!</p>}
 
                 <div ref={logRef} className="mt-6 w-full max-w-md bg-gray-900/95 backdrop-blur-md rounded-xl border border-cyan-500/30 shadow-2xl overflow-hidden flex flex-col h-48">
                   <div className="p-3 border-b border-cyan-500/20 bg-gray-800/80">
@@ -698,15 +677,12 @@ const GameBoard = ({
                         }`}
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {/* Card Back Pattern */}
                       <div className="absolute inset-0 opacity-10">
                         {currentCard.type === "chance" ? "Chance" : "Community Chest"}
                       </div>
 
-                      {/* Glow effect */}
                       <div className="absolute inset-0 bg-white/20 animate-pulse" />
 
-                      {/* Header */}
                       <motion.div
                         initial={{ y: -30, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
@@ -723,7 +699,6 @@ const GameBoard = ({
                         )}
                       </motion.div>
 
-                      {/* Message */}
                       <motion.p
                         initial={{ y: 30, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
@@ -733,7 +708,6 @@ const GameBoard = ({
                         {currentCard.message}
                       </motion.p>
 
-                      {/* Close button */}
                       <button
                         onClick={() => setCurrentCard(null)}
                         className="absolute top-4 right-4 text-white/70 hover:text-white text-3xl transition"
@@ -741,7 +715,6 @@ const GameBoard = ({
                         ×
                       </button>
 
-                      {/* Decorative bottom glow */}
                       <div className="absolute bottom-0 left-0 right-0 h-2 bg-white/30" />
                     </motion.div>
                   </motion.div>
@@ -770,7 +743,6 @@ const GameBoard = ({
                       {["community_chest", "chance", "luxury_tax", "income_tax"].includes(square.type) && <SpecialCard square={square} />}
                       {square.type === "corner" && <CornerCard square={square} />}
 
-                      {/* Development Level Indicator */}
                       {square.type === "property" && devLevel > 0 && (
                         <div className="absolute top-1 right-1 bg-yellow-500 text-black text-xs font-bold rounded px-1 z-20 flex items-center gap-0.5">
                           {devLevel === 5 ? '🏨' : `🏠 ${devLevel}`}
@@ -787,28 +759,14 @@ const GameBoard = ({
                               className={`text-xl md:text-2xl lg:text-3xl border-2 rounded ${isCurrentPlayer ? 'border-cyan-300' : 'border-transparent'}`}
                               initial={{ scale: 1 }}
                               animate={{
-                                y: isCurrentPlayer 
-                                  ? [0, -8, 0]  // Bouncy animation for current player
-                                  : [0, -3, 0], // Subtle float for others
+                                y: isCurrentPlayer ? [0, -8, 0] : [0, -3, 0],
                                 scale: isCurrentPlayer ? [1, 1.1, 1] : 1,
-                                rotate: isCurrentPlayer ? [0, 5, -5, 0] : 0, // Slight wobble for current
+                                rotate: isCurrentPlayer ? [0, 5, -5, 0] : 0,
                               }}
                               transition={{
-                                y: {
-                                  duration: isCurrentPlayer ? 1.2 : 2,
-                                  repeat: Infinity,
-                                  ease: "easeInOut",
-                                },
-                                scale: {
-                                  duration: isCurrentPlayer ? 1.2 : 0,
-                                  repeat: Infinity,
-                                  ease: "easeInOut",
-                                },
-                                rotate: {
-                                  duration: isCurrentPlayer ? 1.5 : 0,
-                                  repeat: Infinity,
-                                  ease: "easeInOut",
-                                },
+                                y: { duration: isCurrentPlayer ? 1.2 : 2, repeat: Infinity, ease: "easeInOut" },
+                                scale: { duration: isCurrentPlayer ? 1.2 : 0, repeat: Infinity, ease: "easeInOut" },
+                                rotate: { duration: isCurrentPlayer ? 1.5 : 0, repeat: Infinity, ease: "easeInOut" },
                               }}
                               whileHover={{ scale: 1.2, y: -2 }}
                             >
@@ -843,14 +801,8 @@ const GameBoard = ({
             boxShadow: "0 10px 30px rgba(0, 255, 255, 0.15)",
             backdropFilter: "blur(10px)",
           },
-          success: {
-            icon: "✔",
-            style: { borderColor: "#10b981" },
-          },
-          error: {
-            icon: "✖",
-            style: { borderColor: "#ef4444" },
-          },
+          success: { icon: "✔", style: { borderColor: "#10b981" } },
+          error: { icon: "✖", style: { borderColor: "#ef4444" } },
         }}
       />
     </ErrorBoundary>

@@ -130,6 +130,17 @@ export default function GameWaiting() {
           router.replace(`/game-play?gameCode=${encodeURIComponent(gameCode)}`);
           return;
         }
+        // Check if full via API and update status
+        if (gameData.players.length === gameData.number_of_players) {
+          const updateRes = await apiClient.put<ApiResponse>(
+            `/games/${gameData.id}`,
+            { status: "RUNNING" }
+          );
+          if (updateRes?.success) {
+            router.replace(`/game-play?gameCode=${encodeURIComponent(gameCode)}`);
+            return;
+          }
+        }
         // Update UI state only if changed
         if (JSON.stringify(gameData) !== JSON.stringify(game)) {
           setGame(gameData);
