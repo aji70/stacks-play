@@ -9,10 +9,10 @@ plan:
     - id: 0
       transactions:
         - contract-publish:
-            contract-name: tyc
+            contract-name: tycoon-version-1
             expected-sender: SP81CZF1YK81CPAMS6PRS3GJSKK35MGZ2R9SNESA
-            cost: 730328
-            path: contracts/tyc.clar
+            cost: 182920
+            path: contracts/tycoon-version-1.clar
             anchor-block-only: true
             clarity-version: 4
       epoch: "3.3"

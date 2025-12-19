@@ -18,19 +18,19 @@ const dave = accounts.get("wallet_4")!;
 
 
 
-describe("tyc Contract Tests", () => {
+describe("tycoon-version-1 Contract Tests", () => {
   it("ensures simnet is well initialised", () => {
     expect(simnet.blockHeight).toBeDefined();
   });
 
   it("shows an example", () => {
-    const { result } = simnet.callReadOnlyFn("tyc", "is-registered",[Cl.principal(alice)], alice);
+    const { result } = simnet.callReadOnlyFn("tycoon-version-1", "is-registered",[Cl.principal(alice)], alice);
     expect(result).toEqual(Cl.bool(false));
   });
 
     it("allows a user to register with a unique username", () => {
     const { result: registerResult } = simnet.callPublicFn(
-      "tyc",
+      "tycoon-version-1",
       "register",
       [Cl.stringAscii("AliceUser")],
       alice
@@ -39,7 +39,7 @@ describe("tyc Contract Tests", () => {
     expect(registerResult).toBeOk(Cl.bool(true));
 
     const { result: isRegisteredResult } = simnet.callReadOnlyFn(
-      "tyc",
+      "tycoon-version-1",
       "is-registered",
       [Cl.principal(alice)],
       alice
@@ -49,10 +49,10 @@ describe("tyc Contract Tests", () => {
   });
 
     it("prevents duplicate registration", () => {
-    simnet.callPublicFn("tyc", "register", [Cl.stringAscii("AliceUser")], alice);
+    simnet.callPublicFn("tycoon-version-1", "register", [Cl.stringAscii("AliceUser")], alice);
 
     const { result: secondAttempt } = simnet.callPublicFn(
-      "tyc",
+      "tycoon-version-1",
       "register",
       [Cl.stringAscii("AliceUser")],
       alice
@@ -62,10 +62,10 @@ describe("tyc Contract Tests", () => {
   });
 
    it("rejects taken usernames", () => {
-    simnet.callPublicFn("tyc", "register", [Cl.stringAscii("AliceUser")], alice);
+    simnet.callPublicFn("tycoon-version-1", "register", [Cl.stringAscii("AliceUser")], alice);
 
     const { result: takenUsername } = simnet.callPublicFn(
-      "tyc",
+      "tycoon-version-1",
       "register",
       [Cl.stringAscii("AliceUser")],
       bob
@@ -78,11 +78,11 @@ describe("tyc Contract Tests", () => {
 
   it("allows a registered user to create a game and updates user stats", async () => {
     // Register the user
-    await simnet.callPublicFn("tyc", "register", [Cl.stringAscii("AliceUser")], alice);
+    await simnet.callPublicFn("tycoon-version-1", "register", [Cl.stringAscii("AliceUser")], alice);
 
     // Create a new game
     const { result: createResult } = await simnet.callPublicFn(
-      "tyc",
+      "tycoon-version-1",
       "create-game",
       [
         Cl.uint(1),            // game-type
@@ -99,12 +99,12 @@ describe("tyc Contract Tests", () => {
     expect(createResult).toBeOk(Cl.uint(0));
 
     // Check contract owner (optional, just logging here)
-    const { result: ownerResult } = await simnet.callReadOnlyFn("tyc", "get-owner", [], alice);
+    const { result: ownerResult } = await simnet.callReadOnlyFn("tycoon-version-1", "get-owner", [], alice);
     console.log("Owner result:", ownerResult);
 
     // Check user stats updated
     const { result: userResult } = await simnet.callReadOnlyFn(
-      "tyc",
+      "tycoon-version-1",
       "get-user",
       [Cl.principal(alice)],
       alice
@@ -131,12 +131,12 @@ describe("tyc Contract Tests", () => {
 
   it("allows another registered user to join a game and updates user stats", async () => {
   // Register both players
-  await simnet.callPublicFn("tyc", "register", [Cl.stringAscii("AliceUser")], alice);
-  await simnet.callPublicFn("tyc", "register", [Cl.stringAscii("BobUser")], bob);
+  await simnet.callPublicFn("tycoon-version-1", "register", [Cl.stringAscii("AliceUser")], alice);
+  await simnet.callPublicFn("tycoon-version-1", "register", [Cl.stringAscii("BobUser")], bob);
 
   // Create game by Alice
   const { result: gameResult } = await simnet.callPublicFn(
-    "tyc",
+    "tycoon-version-1",
     "create-game",
     [
       Cl.uint(1),
@@ -152,7 +152,7 @@ describe("tyc Contract Tests", () => {
 
   // Check Alice stats before join
   const { result: aliceUserBefore } = await simnet.callReadOnlyFn(
-    "tyc",
+    "tycoon-version-1",
     "get-user",
     [Cl.principal(alice)],
     alice
@@ -164,7 +164,7 @@ describe("tyc Contract Tests", () => {
 
   // Bob joins game 0
   const { result: joinResult } = await simnet.callPublicFn(
-    "tyc",
+    "tycoon-version-1",
     "join-game",
     [Cl.uint(0), Cl.uint(2)],
     bob
@@ -173,7 +173,7 @@ describe("tyc Contract Tests", () => {
 
   // Check Bob stats updated
   const { result: bobUserAfter } = await simnet.callReadOnlyFn(
-    "tyc",
+    "tycoon-version-1",
     "get-user",
     [Cl.principal(bob)],
     bob
@@ -185,7 +185,7 @@ describe("tyc Contract Tests", () => {
 
   // Game should now be ongoing
   const { result: gameAfter } = await simnet.callReadOnlyFn(
-    "tyc",
+    "tycoon-version-1",
     "get-game",
     [Cl.uint(0)],
     alice
@@ -197,11 +197,11 @@ describe("tyc Contract Tests", () => {
 
 it("allows a player to update position and balance during ongoing game", async () => {
   // Register and setup 2-player game
-  await simnet.callPublicFn("tyc", "register", [Cl.stringAscii("AliceUser")], alice);
-  await simnet.callPublicFn("tyc", "register", [Cl.stringAscii("BobUser")], bob);
+  await simnet.callPublicFn("tycoon-version-1", "register", [Cl.stringAscii("AliceUser")], alice);
+  await simnet.callPublicFn("tycoon-version-1", "register", [Cl.stringAscii("BobUser")], bob);
 
   await simnet.callPublicFn(
-    "tyc",
+    "tycoon-version-1",
     "create-game",
     [
       Cl.uint(1),
@@ -214,11 +214,11 @@ it("allows a player to update position and balance during ongoing game", async (
     alice
   );
 
-  await simnet.callPublicFn("tyc", "join-game", [Cl.uint(0), Cl.uint(2)], bob);
+  await simnet.callPublicFn("tycoon-version-1", "join-game", [Cl.uint(0), Cl.uint(2)], bob);
 
   // Alice updates position (only caller can update own)
   const { result: updateResult } = await simnet.callPublicFn(
-    "tyc",
+    "tycoon-version-1",
     "update-player-position",
     [
       Cl.uint(0),        // game-id
@@ -233,7 +233,7 @@ it("allows a player to update position and balance during ongoing game", async (
 
   // Verify update
   const { result: playerResult } = await simnet.callReadOnlyFn(
-    "tyc",
+    "tycoon-version-1",
     "get-game-player",
     [Cl.uint(0), Cl.principal(alice)],
     alice
@@ -246,11 +246,11 @@ it("allows a player to update position and balance during ongoing game", async (
 
 it("allows updating position with property ownership", async () => {
   // Setup as above
-  await simnet.callPublicFn("tyc", "register", [Cl.stringAscii("AliceUser")], alice);
-  await simnet.callPublicFn("tyc", "register", [Cl.stringAscii("BobUser")], bob);
+  await simnet.callPublicFn("tycoon-version-1", "register", [Cl.stringAscii("AliceUser")], alice);
+  await simnet.callPublicFn("tycoon-version-1", "register", [Cl.stringAscii("BobUser")], bob);
 
   await simnet.callPublicFn(
-    "tyc",
+    "tycoon-version-1",
     "create-game",
     [
       Cl.uint(1),
@@ -263,11 +263,11 @@ it("allows updating position with property ownership", async () => {
     alice
   );
 
-  await simnet.callPublicFn("tyc", "join-game", [Cl.uint(0), Cl.uint(2)], bob);
+  await simnet.callPublicFn("tycoon-version-1", "join-game", [Cl.uint(0), Cl.uint(2)], bob);
 
   // Alice updates and claims property 5
   const { result: updateResult } = await simnet.callPublicFn(
-    "tyc",
+    "tycoon-version-1",
     "update-player-position",
     [
       Cl.uint(0),
@@ -282,7 +282,7 @@ it("allows updating position with property ownership", async () => {
 
   // Verify property ownership
   const { result: propResult } = await simnet.callReadOnlyFn(
-    "tyc",
+    "tycoon-version-1",
     "get-property",
     [Cl.uint(0), Cl.uint(5)],
     alice
@@ -295,11 +295,11 @@ it("allows updating position with property ownership", async () => {
 });
 
 it("prevents non-player from updating position", async () => {
-  await simnet.callPublicFn("tyc", "register", [Cl.stringAscii("AliceUser")], alice);
-  await simnet.callPublicFn("tyc", "register", [Cl.stringAscii("BobUser")], bob);
+  await simnet.callPublicFn("tycoon-version-1", "register", [Cl.stringAscii("AliceUser")], alice);
+  await simnet.callPublicFn("tycoon-version-1", "register", [Cl.stringAscii("BobUser")], bob);
 
   await simnet.callPublicFn(
-    "tyc",
+    "tycoon-version-1",
     "create-game",
     [
       Cl.uint(1),
@@ -312,11 +312,11 @@ it("prevents non-player from updating position", async () => {
     alice
   );
 
-  await simnet.callPublicFn("tyc", "join-game", [Cl.uint(0), Cl.uint(2)], bob);
+  await simnet.callPublicFn("tycoon-version-1", "join-game", [Cl.uint(0), Cl.uint(2)], bob);
 
   // Bob tries to update Alice's position
   const { result: unauthorizedUpdate } = await simnet.callPublicFn(
-    "tyc",
+    "tycoon-version-1",
     "update-player-position",
     [
       Cl.uint(0),
@@ -333,11 +333,11 @@ it("prevents non-player from updating position", async () => {
 
 // it("allows finalizing a game and winner to withdraw payout", async () => {
 //   // Setup 2-player game
-//   await simnet.callPublicFn("tyc", "register", [Cl.stringAscii("AliceUser")], alice);
-//   await simnet.callPublicFn("tyc", "register", [Cl.stringAscii("BobUser")], bob);
+//   await simnet.callPublicFn("tycoon-version-1", "register", [Cl.stringAscii("AliceUser")], alice);
+//   await simnet.callPublicFn("tycoon-version-1", "register", [Cl.stringAscii("BobUser")], bob);
 
 //   await simnet.callPublicFn(
-//     "tyc",
+//     "tycoon-version-1",
 //     "create-game",
 //     [
 //       Cl.uint(1),
@@ -350,11 +350,11 @@ it("prevents non-player from updating position", async () => {
 //     alice
 //   );
 
-//   await simnet.callPublicFn("tyc", "join-game", [Cl.uint(0), Cl.uint(2)], bob);
+//   await simnet.callPublicFn("tycoon-version-1", "join-game", [Cl.uint(0), Cl.uint(2)], bob);
 
 //   // Finalize game with Alice as winner
 //   const { result: finalizeResult } = await simnet.callPublicFn(
-//     "tyc",
+//     "tycoon-version-1",
 //     "finalize-game",
 //     [Cl.uint(0), Cl.principal(alice), Cl.uint(15)],
 //     alice
@@ -363,7 +363,7 @@ it("prevents non-player from updating position", async () => {
 
 //   // Winner withdraws payout
 //   const { result: payoutResult } = await simnet.callPublicFn(
-//     "tyc",
+//     "tycoon-version-1",
 //     "withdraw-payout",
 //     [Cl.uint(0)],
 //     alice
@@ -373,7 +373,7 @@ it("prevents non-player from updating position", async () => {
 
 //   // Attempting to withdraw again fails
 // //   const { result: doubleWithdraw } = await simnet.callPublicFn(
-// //     "tyc",
+// //     "tycoon-version-1",
 // //     "withdraw-payout",
 // //     [Cl.uint(0)],
 // //     alice
@@ -383,11 +383,11 @@ it("prevents non-player from updating position", async () => {
 // });
 
 // it("finalizes game without bonus if turns < MIN and allows payout", async () => {
-//   await simnet.callPublicFn("tyc", "register", [Cl.stringAscii("CharlieUser")], charlie);
-//   await simnet.callPublicFn("tyc", "register", [Cl.stringAscii("DaveUser")], dave);
+//   await simnet.callPublicFn("tycoon-version-1", "register", [Cl.stringAscii("CharlieUser")], charlie);
+//   await simnet.callPublicFn("tycoon-version-1", "register", [Cl.stringAscii("DaveUser")], dave);
 
 //   await simnet.callPublicFn(
-//     "tyc",
+//     "tycoon-version-1",
 //     "create-game",
 //     [
 //       Cl.uint(1),
@@ -400,11 +400,11 @@ it("prevents non-player from updating position", async () => {
 //     charlie
 //   );
 
-//   await simnet.callPublicFn("tyc", "join-game", [Cl.uint(0), Cl.uint(2)], dave);
+//   await simnet.callPublicFn("tycoon-version-1", "join-game", [Cl.uint(0), Cl.uint(2)], dave);
 
 //   // Finalize with fewer turns
 //   const { result: finalizeResult } = await simnet.callPublicFn(
-//     "tyc",
+//     "tycoon-version-1",
 //     "finalize-game",
 //     [Cl.uint(0), Cl.principal(charlie), Cl.uint(5)],
 //     charlie
@@ -413,7 +413,7 @@ it("prevents non-player from updating position", async () => {
 
 //   // Charlie withdraws payout
 //   const { result: payoutResult } = await simnet.callPublicFn(
-//     "tyc",
+//     "tycoon-version-1",
 //     "withdraw-payout",
 //     [Cl.uint(0)],
 //     charlie
@@ -422,11 +422,11 @@ it("prevents non-player from updating position", async () => {
 // });
 
 // it("removes a player and ends game if one remains, then winner withdraws", async () => {
-//   await simnet.callPublicFn("tyc", "register", [Cl.stringAscii("AliceUser")], alice);
-//   await simnet.callPublicFn("tyc", "register", [Cl.stringAscii("BobUser")], bob);
+//   await simnet.callPublicFn("tycoon-version-1", "register", [Cl.stringAscii("AliceUser")], alice);
+//   await simnet.callPublicFn("tycoon-version-1", "register", [Cl.stringAscii("BobUser")], bob);
 
 //   const { result: createRes } = await simnet.callPublicFn(
-//     "tyc",
+//     "tycoon-version-1",
 //     "create-game",
 //     [
 //       Cl.uint(1),
@@ -440,12 +440,12 @@ it("prevents non-player from updating position", async () => {
 //   );
 //   expect(createRes).toBeOk(Cl.uint(0));
 
-//   const { result: joinRes } = await simnet.callPublicFn("tyc", "join-game", [Cl.uint(0), Cl.uint(2)], bob);
+//   const { result: joinRes } = await simnet.callPublicFn("tycoon-version-1", "join-game", [Cl.uint(0), Cl.uint(2)], bob);
 //   expect(joinRes).toBeOk(Cl.uint(2));
 
 //   // Remove Bob (Alice remains)
 //   const { result: removeResult } = await simnet.callPublicFn(
-//     "tyc",
+//     "tycoon-version-1",
 //     "remove-player",
 //     [Cl.uint(0), Cl.principal(bob), Cl.some(Cl.principal(alice)), Cl.uint(15)],
 //     alice
@@ -453,7 +453,7 @@ it("prevents non-player from updating position", async () => {
 //   expect(removeResult).toBeOk(Cl.bool(true));
 
 //   // Check game ended
-//   const { result: endedGame } = await simnet.callReadOnlyFn("tyc", "get-game", [Cl.uint(0)], alice);
+//   const { result: endedGame } = await simnet.callReadOnlyFn("tycoon-version-1", "get-game", [Cl.uint(0)], alice);
 //   if (endedGame.type !== ClarityType.OptionalSome) throw new Error("Game not found");
 //   const endedTuple = (endedGame.value as TupleCV).value;
 //   expect((endedTuple["status"] as UIntCV).value).toBe(BigInt(3));
@@ -461,7 +461,7 @@ it("prevents non-player from updating position", async () => {
 
 //   // Winner withdraws payout
 //   const { result: payoutResult } = await simnet.callPublicFn(
-//     "tyc",
+//     "tycoon-version-1",
 //     "withdraw-payout",
 //     [Cl.uint(0)],
 //     alice

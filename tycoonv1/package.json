@@ -1,6 +1,6 @@
 
 {
-  "name": "ty-tests",
+  "name": "tycoonv1-tests",
   "version": "1.0.0",
   "description": "Run unit tests on this project.",
   "type": "module",

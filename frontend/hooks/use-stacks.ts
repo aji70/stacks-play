@@ -68,7 +68,6 @@ async function handleRegister(username: string): Promise<string | undefined> {
         postConditionMode: PostConditionMode.Allow,
         onFinish: (data) => {
           console.log("TX sent:", data);
-          window.alert("Sent register transaction");
           resolve(data.txId); // return the transaction ID
         },
         onCancel: () => {

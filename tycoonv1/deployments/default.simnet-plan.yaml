@@ -64,8 +64,8 @@ plan:
     - id: 0
       transactions:
         - emulated-contract-publish:
-            contract-name: tyc
+            contract-name: tycoon-version-1
             emulated-sender: ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
-            path: contracts/tyc.clar
+            path: contracts/tycoon-version-1.clar
             clarity-version: 4
       epoch: "3.3"
