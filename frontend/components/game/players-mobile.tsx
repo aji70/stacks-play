@@ -439,7 +439,11 @@ export default function GamePlayers({
             onClick={toggleTrade}
             className="w-full text-2xl md:text-3xl font-bold text-pink-300 flex justify-between items-center pb-4"
           >
-            <span>TRADES {tradeRequests.length > 0 && `(${tradeRequests.length} pending)`}</span>
+            <span>
+              TRADES
+              {(tradeRequests.length > 0 || openTrades.length > 0) &&
+                ` (${tradeRequests.length + openTrades.length} active)`}
+            </span>
             <motion.span
               animate={{ rotate: showTrade ? 180 : 0 }}
               transition={{ duration: 0.3 }}
@@ -457,12 +461,15 @@ export default function GamePlayers({
                 exit={{ height: 0, opacity: 0 }}
                 className="overflow-hidden space-y-12"
               >
-                {openTrades.length > 0 && (
-                  <div>
-                    <h4 className="text-2xl md:text-3xl font-bold text-cyan-400 mb-6 flex items-center gap-3">
-                      <span>📤</span>
-                      <span>MY ACTIVE TRADES</span>
-                    </h4>
+                {/* MY ACTIVE TRADES - Always shown first and visible immediately on mobile */}
+                <div>
+                  <h4 className="text-2xl md:text-3xl font-bold text-cyan-400 mb-6 flex items-center gap-3">
+                    <span>📤</span>
+                    <span>MY ACTIVE TRADES</span>
+                    {openTrades.length > 0 && <span className="ml-2 text-yellow-300">({openTrades.length})</span>}
+                  </h4>
+
+                  {openTrades.length > 0 ? (
                     <div className="space-y-6">
                       {openTrades.map((trade) => {
                         const offeredProps = properties.filter((p) =>
@@ -514,9 +521,14 @@ export default function GamePlayers({
                         );
                       })}
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    <div className="text-center text-gray-500 py-8">
+                      <p className="text-xl">No active trades</p>
+                    </div>
+                  )}
+                </div>
 
+                {/* INCOMING REQUESTS */}
                 {tradeRequests.length > 0 && (
                   <div>
                     <h4 className="text-2xl md:text-3xl font-bold text-cyan-400 mb-6 flex items-center gap-3">
@@ -580,6 +592,7 @@ export default function GamePlayers({
                   </div>
                 )}
 
+                {/* EMPTY STATE - only when both sections are empty */}
                 {openTrades.length === 0 && tradeRequests.length === 0 && (
                   <div className="text-center text-gray-500 py-20">
                     <div className="text-7xl mb-6">💱</div>
