@@ -18,18 +18,6 @@ interface GamePlayersProps {
   me: Player | null;
 }
 
-/* ==================== Mobile Toggle Button (defined outside) ==================== */
-const MobileToggleButton: React.FC<{ onClick: () => void }> = ({ onClick }) => (
-  <motion.button
-    whileTap={{ scale: 0.9 }}
-    onClick={onClick}
-    className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-gradient-to-r from-cyan-500 to-purple-600 text-white font-bold text-xl px-10 py-5 rounded-full shadow-2xl shadow-cyan-500/50"
-  >
-    PLAYERS & EMPIRE
-  </motion.button>
-);
-
-/* ==================== Main Component ==================== */
 export default function GamePlayers({
   game,
   properties,
@@ -41,7 +29,6 @@ export default function GamePlayers({
   const address = userData?.addresses?.stx?.[0]?.address;
   const isMobile = useMediaQuery("(max-width: 1024px)");
 
-  const [isOpen, setIsOpen] = useState(false);
   const [showEmpire, setShowEmpire] = useState(false);
   const [showTrade, setShowTrade] = useState(false);
   const [openTrades, setOpenTrades] = useState<any[]>([]);
@@ -102,35 +89,34 @@ export default function GamePlayers({
   );
 
   const sortedPlayers = useMemo(
-    () =>
-      [...(game?.players ?? [])].sort(
-        (a, b) => (a.turn_order ?? Infinity) - (b.turn_order ?? Infinity)
-      ),
-    [game?.players]
-  );
-
+     () =>
+       [...(game?.players ?? [])].sort(
+         (a, b) => (a.turn_order ?? Infinity) - (b.turn_order ?? Infinity)
+       ),
+     [game?.players]
+   );
  
-  const fetchTrades = useCallback(async () => {
-    if (!me || !game?.id) return;
-    try {
-      const [_initiated, _incoming] = await Promise.all([
-        apiClient.get<ApiResponse<any[]>>(`/game-trade-requests/my/${game.id}/player/${me.user_id}`),
-        apiClient.get<ApiResponse<any[]>>(`/game-trade-requests/incoming/${game.id}/player/${me.user_id}`),
-      ]);
-
-      // Fixed: .data is the array, not .data.data
-      const initiated = _initiated.data || [];
-      const incoming = _incoming.data || [];
-
-      setOpenTrades(initiated);
-      setTradeRequests(incoming);
-    } catch (err) {
-      console.error("Error loading trades:", err);
-      toast.error("Failed to load trades");
-    }
-  }, [me, game?.id]);
-
- useEffect(() => {
+   const fetchTrades = useCallback(async () => {
+     if (!me || !game?.id) return;
+     try {
+       const [_initiated, _incoming] = await Promise.all([
+         apiClient.get<ApiResponse<any[]>>(`/game-trade-requests/my/${game.id}/player/${me.user_id}`),
+         apiClient.get<ApiResponse<any[]>>(`/game-trade-requests/incoming/${game.id}/player/${me.user_id}`),
+       ]);
+ 
+       // Fixed: .data is the array, not .data.data
+       const initiated = _initiated.data || [];
+       const incoming = _incoming.data || [];
+ 
+       setOpenTrades(initiated);
+       setTradeRequests(incoming);
+     } catch (err) {
+       console.error("Error loading trades:", err);
+       toast.error("Failed to load trades");
+     }
+   }, [me, game?.id]);
+ 
+   useEffect(() => {
      if (!me || !game?.id) return;
      let isFetching = false;
      let interval: NodeJS.Timeout;
@@ -290,73 +276,79 @@ export default function GamePlayers({
     }
   };
 
-  const content = (
-    <div className={`h-full flex flex-col ${isMobile ? "pb-20" : ""}`}>
-      <div className="p-5 space-y-6 overflow-y-auto flex-1">
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-[#0a0e17] to-[#1a0033] text-white overflow-y-auto">
+      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-pink-500 via-cyan-400 to-purple-600 shadow-lg" />
+
+      <div className="p-4 md:p-6 space-y-6">
         <motion.h2
           animate={{ textShadow: ["0 0 10px #0ff", "0 0 20px #0ff", "0 0 10px #0ff"] }}
           transition={{ duration: 2, repeat: Infinity }}
-          className="text-3xl font-bold text-cyan-300 text-center tracking-widest"
+          className="text-3xl md:text-4xl font-bold text-cyan-300 text-center tracking-widest"
         >
           PLAYERS
         </motion.h2>
 
-        {sortedPlayers.map((player) => {
-          const isWinner = player.user_id === game.winner_id;
-          const isNextTurn = player.user_id === game.next_player_id;
-          const isMe = player.address?.toLowerCase() === address?.toLowerCase();
-          const canTrade = isNext && !player.in_jail && !isMe;
+        {/* Players List */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {sortedPlayers.map((player) => {
+            const isWinner = player.user_id === game.winner_id;
+            const isNextTurn = player.user_id === game.next_player_id;
+            const isMe = player.address?.toLowerCase() === address?.toLowerCase();
+            const canTrade = isNext && !player.in_jail && !isMe;
 
-          return (
-            <motion.div
-              key={player.user_id}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className={`p-5 rounded-2xl border-3 transition-all ${
-                isNextTurn
-                  ? "border-cyan-400 bg-cyan-900/50 shadow-xl shadow-cyan-400/70"
-                  : "border-purple-800 bg-purple-900/30"
-              }`}
-            >
-              <div className="flex justify-between items-center mb-3">
-                <div className="flex items-center gap-4">
-                  <span className="text-5xl">{getPlayerSymbol(player.symbol)}</span>
-                  <div>
-                    <div className="font-bold text-xl text-cyan-200">
-                      {player.username || player.address?.slice(0, 8)}
-                      {isMe && <span className="block text-sm text-green-400">YOU</span>}
-                      {isWinner && " 👑"}
+            return (
+              <motion.div
+                key={player.user_id}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className={`p-5 rounded-2xl border-3 transition-all ${
+                  isNextTurn
+                    ? "border-cyan-400 bg-cyan-900/50 shadow-xl shadow-cyan-400/70"
+                    : "border-purple-800 bg-purple-900/30"
+                }`}
+              >
+                <div className="flex justify-between items-center mb-4">
+                  <div className="flex items-center gap-4">
+                    <span className="text-5xl md:text-6xl">{getPlayerSymbol(player.symbol)}</span>
+                    <div>
+                      <div className="font-bold text-xl md:text-2xl text-cyan-200">
+                        {player.username || player.address?.slice(0, 8)}
+                        {isMe && <span className="block text-sm md:text-base text-green-400">YOU</span>}
+                        {isWinner && " 👑"}
+                      </div>
                     </div>
                   </div>
+                  <div className="text-2xl md:text-3xl font-bold text-yellow-400">
+                    ${player.balance.toLocaleString()}
+                  </div>
                 </div>
-                <div className="text-2xl font-bold text-yellow-400">
-                  ${player.balance.toLocaleString()}
-                </div>
-              </div>
 
-              {canTrade && (
-                <motion.button
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => startTrade(player)}
-                  className="w-full py-3 bg-gradient-to-r from-pink-600 to-purple-600 rounded-xl font-bold text-xl text-white shadow-lg"
-                >
-                  TRADE
-                </motion.button>
-              )}
-            </motion.div>
-          );
-        })}
+                {canTrade && (
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => startTrade(player)}
+                    className="w-full py-3 bg-gradient-to-r from-pink-600 to-purple-600 rounded-xl font-bold text-xl text-white shadow-lg"
+                  >
+                    TRADE
+                  </motion.button>
+                )}
+              </motion.div>
+            );
+          })}
+        </div>
 
+        {/* My Empire Section */}
         <div className="border-t-4 border-purple-600 pt-6">
           <button
             onClick={toggleEmpire}
-            className="w-full text-2xl font-bold text-purple-300 flex justify-between items-center"
+            className="w-full text-2xl md:text-3xl font-bold text-purple-300 flex justify-between items-center"
           >
             <span>MY EMPIRE</span>
             <motion.span
               animate={{ rotate: showEmpire ? 180 : 0 }}
               transition={{ duration: 0.25 }}
-              className="text-4xl text-cyan-400"
+              className="text-4xl md:text-5xl text-cyan-400"
             >
               ▼
             </motion.span>
@@ -368,7 +360,7 @@ export default function GamePlayers({
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
-                className="overflow-hidden mt-4 grid grid-cols-2 gap-4"
+                className="overflow-hidden mt-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
               >
                 {my_properties.length > 0 ? (
                   my_properties.map((prop, i) => (
@@ -384,7 +376,7 @@ export default function GamePlayers({
                       {prop.color && (
                         <div className="h-4 rounded-t-xl -m-4 -mt-4 mb-3" style={{ backgroundColor: prop.color }} />
                       )}
-                      <div className="text-lg font-bold text-cyan-200 truncate">{prop.name}</div>
+                      <div className="text-base md:text-lg font-bold text-cyan-200 truncate">{prop.name}</div>
                       <div className="text-sm text-green-400 mt-1">Rent: ${rentPrice(prop.id)}</div>
                       {isMortgaged(prop.id) && (
                         <div className="text-red-500 text-sm mt-2 font-bold animate-pulse">MORTGAGED</div>
@@ -392,7 +384,7 @@ export default function GamePlayers({
                     </motion.div>
                   ))
                 ) : (
-                  <div className="col-span-2 text-center text-gray-400 py-8 text-lg">
+                  <div className="col-span-full text-center text-gray-400 py-12 text-xl">
                     No properties yet..
                   </div>
                 )}
@@ -401,16 +393,17 @@ export default function GamePlayers({
           </AnimatePresence>
         </div>
 
-        <div className="border-t-4 border-pink-600 pt-6 pb-20">
+        {/* Trades Section */}
+        <div className="border-t-4 border-pink-600 pt-6 pb-10">
           <button
             onClick={toggleTrade}
-            className="w-full text-2xl font-bold text-pink-300 flex justify-between items-center"
+            className="w-full text-2xl md:text-3xl font-bold text-pink-300 flex justify-between items-center"
           >
             <span>TRADES {tradeRequests.length > 0 && `(${tradeRequests.length})`}</span>
             <motion.span
               animate={{ rotate: showTrade ? 180 : 0 }}
               transition={{ duration: 0.25 }}
-              className="text-4xl text-cyan-400"
+              className="text-4xl md:text-5xl text-cyan-400"
             >
               ▼
             </motion.span>
@@ -422,121 +415,111 @@ export default function GamePlayers({
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
-                className="overflow-hidden mt-5 space-y-6"
+                className="overflow-hidden mt-6 space-y-8"
               >
+                {/* My Active Trades */}
                 {openTrades.length > 0 && (
                   <div>
-                    <h4 className="text-2xl font-bold text-cyan-400 mb-4 flex items-center gap-2">
+                    <h4 className="text-2xl md:text-3xl font-bold text-cyan-400 mb-6 flex items-center gap-3">
                       <span>📤</span>
                       <span>MY ACTIVE TRADES</span>
                     </h4>
-                    {openTrades.map((trade) => {
-                      const offeredProps = properties.filter((p) =>
-                        trade.offer_properties?.includes(p.id)
-                      );
-                      const requestedProps = properties.filter((p) =>
-                        trade.requested_properties?.includes(p.id)
-                      );
-                      const targetPlayer = game.players.find(
-                        (pl) => pl.user_id === trade.target_player_id
-                      );
+                    <div className="space-y-5">
+                      {openTrades.map((trade) => {
+                        const offeredProps = properties.filter((p) => trade.offer_properties?.includes(p.id));
+                        const requestedProps = properties.filter((p) => trade.requested_properties?.includes(p.id));
+                        const targetPlayer = game.players.find((pl) => pl.user_id === trade.target_player_id);
 
-                      return (
-                        <motion.div
-                          key={trade.id}
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="bg-gradient-to-br from-purple-900/60 to-cyan-900/40 border-3 border-cyan-500 rounded-2xl p-6 mb-5"
-                        >
-                          <div className="font-bold text-xl text-cyan-300 mb-3">
-                            With {targetPlayer?.username || targetPlayer?.address?.slice(0, 8)}
-                          </div>
-                          <div className="space-y-3 text-lg">
-                            <div className="text-green-400">
-                              Gives: {offeredProps.length ? offeredProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.offer_amount || 0}
+                        return (
+                          <div
+                            key={trade.id}
+                            className="bg-gradient-to-br from-purple-900/60 to-cyan-900/40 border-3 border-cyan-500 rounded-2xl p-6"
+                          >
+                            <div className="font-bold text-xl md:text-2xl text-cyan-300 mb-4">
+                              With {targetPlayer?.username || targetPlayer?.address?.slice(0, 8)}
                             </div>
-                            <div className="text-red-400">
-                              Wants: {requestedProps.length ? requestedProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.requested_amount || 0}
+                            <div className="space-y-3 text-base md:text-lg">
+                              <div className="text-green-400">
+                                Gives: {offeredProps.length ? offeredProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.offer_amount || 0}
+                              </div>
+                              <div className="text-red-400">
+                                Wants: {requestedProps.length ? requestedProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.requested_amount || 0}
+                              </div>
+                            </div>
+                            <div className={`mt-5 px-4 py-2 rounded-lg text-center font-bold text-lg ${
+                              trade.status === "accepted" ? "bg-green-900/50 text-green-300" :
+                              trade.status === "declined" ? "bg-red-900/50 text-red-300" :
+                              "bg-yellow-900/50 text-yellow-300"
+                            }`}>
+                              {trade.status.toUpperCase()}
                             </div>
                           </div>
-                          <div className={`mt-4 px-4 py-2 rounded-lg text-center font-bold ${
-                            trade.status === "accepted" ? "bg-green-900/50 text-green-300" :
-                            trade.status === "declined" ? "bg-red-900/50 text-red-300" :
-                            "bg-yellow-900/50 text-yellow-300"
-                          }`}>
-                            {trade.status.toUpperCase()}
-                          </div>
-                        </motion.div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 
+                {/* Incoming Trade Requests */}
                 {tradeRequests.length > 0 && (
                   <div>
-                    <h4 className="text-2xl font-bold text-cyan-400 mb-4 flex items-center gap-2">
+                    <h4 className="text-2xl md:text-3xl font-bold text-cyan-400 mb-6 flex items-center gap-3">
                       <span>📥</span>
                       <span>INCOMING REQUESTS</span>
                     </h4>
-                    {tradeRequests.map((trade) => {
-                      const offeredProps = properties.filter((p) =>
-                        trade.offer_properties?.includes(p.id)
-                      );
-                      const requestedProps = properties.filter((p) =>
-                        trade.requested_properties?.includes(p.id)
-                      );
-                      const fromPlayer = game.players.find(
-                        (pl) => pl.user_id === trade.player_id
-                      );
+                    <div className="space-y-5">
+                      {tradeRequests.map((trade) => {
+                        const offeredProps = properties.filter((p) => trade.offer_properties?.includes(p.id));
+                        const requestedProps = properties.filter((p) => trade.requested_properties?.includes(p.id));
+                        const fromPlayer = game.players.find((pl) => pl.user_id === trade.player_id);
 
-                      return (
-                        <motion.div
-                          key={trade.id}
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="bg-gradient-to-br from-purple-900/60 to-cyan-900/40 border-3 border-cyan-500 rounded-2xl p-6 mb-5"
-                        >
-                          <div className="font-bold text-xl text-cyan-300 mb-3">
-                            From {fromPlayer?.username || fromPlayer?.address?.slice(0, 8)}
-                          </div>
-                          <div className="space-y-3 text-lg">
-                            <div className="text-green-400">
-                              Gives: {offeredProps.length ? offeredProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.offer_amount || 0}
+                        return (
+                          <div
+                            key={trade.id}
+                            className="bg-gradient-to-br from-purple-900/60 to-cyan-900/40 border-3 border-cyan-500 rounded-2xl p-6"
+                          >
+                            <div className="font-bold text-xl md:text-2xl text-cyan-300 mb-4">
+                              From {fromPlayer?.username || fromPlayer?.address?.slice(0, 8)}
                             </div>
-                            <div className="text-red-400">
-                              Wants: {requestedProps.length ? requestedProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.requested_amount || 0}
+                            <div className="space-y-3 text-base md:text-lg">
+                              <div className="text-green-400">
+                                Gives: {offeredProps.length ? offeredProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.offer_amount || 0}
+                              </div>
+                              <div className="text-red-400">
+                                Wants: {requestedProps.length ? requestedProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.requested_amount || 0}
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-3 gap-3 mt-6">
+                              <button
+                                onClick={() => handleTradeAction(trade.id, "accepted")}
+                                className="py-4 bg-green-600 rounded-xl font-bold text-white text-lg md:text-xl"
+                              >
+                                ACCEPT
+                              </button>
+                              <button
+                                onClick={() => handleTradeAction(trade.id, "declined")}
+                                className="py-4 bg-red-600 rounded-xl font-bold text-white text-lg md:text-xl"
+                              >
+                                DECLINE
+                              </button>
+                              <button
+                                onClick={() => handleTradeAction(trade.id, "counter")}
+                                className="py-4 bg-yellow-600 rounded-xl font-bold text-black text-lg md:text-xl"
+                              >
+                                COUNTER
+                              </button>
                             </div>
                           </div>
-                          <div className="grid grid-cols-3 gap-3 mt-5">
-                            <button
-                              onClick={() => handleTradeAction(trade.id, "accepted")}
-                              className="py-3 bg-green-600 rounded-xl font-bold text-white text-lg"
-                            >
-                              ACCEPT
-                            </button>
-                            <button
-                              onClick={() => handleTradeAction(trade.id, "declined")}
-                              className="py-3 bg-red-600 rounded-xl font-bold text-white text-lg"
-                            >
-                              DECLINE
-                            </button>
-                            <button
-                              onClick={() => handleTradeAction(trade.id, "counter")}
-                              className="py-3 bg-yellow-600 rounded-xl font-bold text-black text-lg"
-                            >
-                              COUNTER
-                            </button>
-                          </div>
-                        </motion.div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 
                 {openTrades.length === 0 && tradeRequests.length === 0 && (
-                  <div className="text-center text-gray-500 py-12">
+                  <div className="text-center text-gray-500 py-16">
                     <div className="text-6xl mb-4">💱</div>
-                    <p className="text-xl">No trades yet..</p>
+                    <p className="text-2xl">No trades yet..</p>
                   </div>
                 )}
               </motion.div>
@@ -544,122 +527,43 @@ export default function GamePlayers({
           </AnimatePresence>
         </div>
       </div>
-    </div>
-  );
 
-  if (!isMobile) {
-    return (
-      <aside className="w-96 h-full bg-gradient-to-b from-[#0a0e17] to-[#1a0033] border-l-4 border-cyan-500 shadow-2xl overflow-y-auto relative">
-        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-pink-500 via-cyan-400 to-purple-600 shadow-lg" />
-        {content}
-
-        <AnimatePresence>
-          {isNext && selectedProperty && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-              onClick={() => setSelectedProperty(null)}
-            >
-              <motion.div
-                initial={{ scale: 0.8 }}
-                animate={{ scale: 1 }}
-                onClick={(e) => e.stopPropagation()}
-                className="relative bg-gradient-to-br from-purple-900 to-cyan-900 rounded-2xl border-4 border-cyan-400 shadow-2xl p-8 max-w-md w-full"
-              >
-                <button
-                  onClick={() => setSelectedProperty(null)}
-                  className="absolute top-4 right-4 text-3xl text-red-400 hover:text-red-300"
-                >
-                  ×
-                </button>
-                <h3 className="text-3xl font-bold text-cyan-300 text-center mb-8">{selectedProperty.name}</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <button onClick={() => { handleDevelopment(selectedProperty.id); setSelectedProperty(null); }} className="py-4 bg-green-600 rounded-xl font-bold text-white text-xl shadow-lg">BUILD</button>
-                  <button onClick={() => { handleDowngrade(selectedProperty.id); setSelectedProperty(null); }} className="py-4 bg-orange-600 rounded-xl font-bold text-white text-xl shadow-lg">SELL</button>
-                  <button onClick={() => { handleMortgage(selectedProperty.id); setSelectedProperty(null); }} className="py-4 bg-blue-600 rounded-xl font-bold text-white text-xl shadow-lg">MORTGAGE</button>
-                  <button onClick={() => { handleUnmortgage(selectedProperty.id); setSelectedProperty(null); }} className="py-4 bg-purple-600 rounded-xl font-bold text-white text-xl shadow-lg">REDEEM</button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </aside>
-    );
-  }
-
-  return (
-    <>
-      <MobileToggleButton onClick={() => setIsOpen(true)} />
-
-      <AnimatePresence>
-        {isOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsOpen(false)}
-              className="fixed inset-0 bg-black/80 backdrop-blur-sm z-40"
-            />
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", damping: 30, stiffness: 300 }}
-              className="fixed bottom-0 left-0 right-0 max-h-[90vh] bg-gradient-to-b from-[#0a0e17] to-[#1a0033] rounded-t-3xl border-t-4 border-cyan-500 shadow-2xl z-50 overflow-hidden"
-            >
-              <div className="flex justify-center pt-4 pb-2">
-                <div className="w-20 h-2 bg-cyan-500 rounded-full" />
-              </div>
-              <button
-                onClick={() => setIsOpen(false)}
-                className="absolute top-6 right-6 text-4xl text-red-400"
-              >
-                ×
-              </button>
-              <div className="h-full overflow-y-auto">
-                {content}
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
+      {/* Property Management Modal */}
       <AnimatePresence>
         {isNext && selectedProperty && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-end justify-center z-50 p-4"
+            className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-50 p-4"
             onClick={() => setSelectedProperty(null)}
           >
             <motion.div
-              initial={{ y: 100 }}
-              animate={{ y: 0 }}
+              initial={{ scale: 0.9, y: 50 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 50 }}
               onClick={(e) => e.stopPropagation()}
-              className="relative bg-gradient-to-t from-purple-900 to-cyan-900 rounded-t-3xl border-t-4 border-cyan-400 shadow-2xl p-8 w-full max-w-lg"
+              className="relative bg-gradient-to-br from-purple-900 to-cyan-900 rounded-3xl border-4 border-cyan-400 shadow-2xl p-8 w-full max-w-lg"
             >
               <button
                 onClick={() => setSelectedProperty(null)}
-                className="absolute top-4 right-4 text-3xl text-red-400"
+                className="absolute top-4 right-4 text-4xl text-red-400 hover:text-red-300"
               >
                 ×
               </button>
-              <h3 className="text-3xl font-bold text-cyan-300 text-center mb-8">{selectedProperty.name}</h3>
+              <h3 className="text-3xl md:text-4xl font-bold text-cyan-300 text-center mb-10">{selectedProperty.name}</h3>
               <div className="grid grid-cols-2 gap-4">
-                <button onClick={() => { handleDevelopment(selectedProperty.id); setSelectedProperty(null); }} className="py-5 bg-green-600 rounded-xl font-bold text-white text-xl shadow-lg">BUILD</button>
-                <button onClick={() => { handleDowngrade(selectedProperty.id); setSelectedProperty(null); }} className="py-5 bg-orange-600 rounded-xl font-bold text-white text-xl shadow-lg">SELL</button>
-                <button onClick={() => { handleMortgage(selectedProperty.id); setSelectedProperty(null); }} className="py-5 bg-blue-600 rounded-xl font-bold text-white text-xl shadow-lg">MORTGAGE</button>
-                <button onClick={() => { handleUnmortgage(selectedProperty.id); setSelectedProperty(null); }} className="py-5 bg-purple-600 rounded-xl font-bold text-white text-xl shadow-lg">REDEEM</button>
+                <button onClick={() => { handleDevelopment(selectedProperty.id); setSelectedProperty(null); }} className="py-5 bg-green-600 rounded-2xl font-bold text-white text-xl shadow-lg">BUILD</button>
+                <button onClick={() => { handleDowngrade(selectedProperty.id); setSelectedProperty(null); }} className="py-5 bg-orange-600 rounded-2xl font-bold text-white text-xl shadow-lg">SELL</button>
+                <button onClick={() => { handleMortgage(selectedProperty.id); setSelectedProperty(null); }} className="py-5 bg-blue-600 rounded-2xl font-bold text-white text-xl shadow-lg">MORTGAGE</button>
+                <button onClick={() => { handleUnmortgage(selectedProperty.id); setSelectedProperty(null); }} className="py-5 bg-purple-600 rounded-2xl font-bold text-white text-xl shadow-lg">REDEEM</button>
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
+      {/* Trade Modal (Mobile-Optimized) */}
       <TradeModal
         open={tradeModal.open}
         title={`Trade with ${tradeModal.target?.username || "Player"}`}
@@ -683,6 +587,7 @@ export default function GamePlayers({
         targetPlayerAddress={tradeModal.target?.address}
       />
 
+      {/* Counter Trade Modal */}
       <TradeModal
         open={counterModal.open}
         title="Counter Offer"
@@ -705,11 +610,11 @@ export default function GamePlayers({
         toggleSelect={toggleSelect}
         targetPlayerAddress={game.players.find((p) => p.user_id === counterModal.trade?.player_id)?.address}
       />
-    </>
+    </div>
   );
 }
 
-/* ==================== Trade Modal ==================== */
+/* ==================== Mobile-Friendly Trade Modal ==================== */
 function TradeModal({
   open,
   title,
@@ -744,16 +649,16 @@ function TradeModal({
   const PropertyCard = ({ prop, isSelected, onClick }: { prop: Property; isSelected: boolean; onClick: () => void }) => (
     <div
       onClick={onClick}
-      className={`p-4 rounded-xl border-3 cursor-pointer transition-all flex flex-col gap-2 ${
+      className={`p-4 rounded-2xl border-4 cursor-pointer transition-all flex flex-col gap-3 ${
         isSelected
-          ? "border-cyan-400 bg-cyan-900/60 shadow-2xl shadow-cyan-400/60"
-          : "border-gray-600 hover:border-gray-400"
+          ? "border-cyan-400 bg-cyan-900/70 shadow-2xl shadow-cyan-400/60"
+          : "border-gray-700 hover:border-gray-500 bg-black/50"
       }`}
     >
       {prop.color && (
-        <div className="h-8 rounded-t-xl -m-4 -mt-4 mb-3" style={{ backgroundColor: prop.color }} />
+        <div className="h-10 rounded-t-2xl -m-4 -mt-4 mb-4" style={{ backgroundColor: prop.color }} />
       )}
-      <div className="text-base font-bold text-cyan-200 text-center leading-tight">{prop.name}</div>
+      <div className="text-lg font-bold text-cyan-200 text-center">{prop.name}</div>
     </div>
   );
 
@@ -762,46 +667,55 @@ function TradeModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black/90 backdrop-blur-xl flex items-end justify-center z-50"
       onClick={onClose}
     >
       <motion.div
-        initial={{ scale: 0.9 }}
-        animate={{ scale: 1 }}
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        transition={{ type: "spring", damping: 30, stiffness: 300 }}
         onClick={(e) => e.stopPropagation()}
-        className="relative bg-gradient-to-br from-purple-900 to-black rounded-3xl border-4 border-cyan-500 shadow-2xl p-8 w-full max-w-5xl max-h-[90vh] overflow-y-auto"
+        className="relative bg-gradient-to-t from-purple-900 via-black to-cyan-900 rounded-t-3xl border-t-4 border-x-4 border-cyan-500 shadow-2xl w-full max-h-[95vh] overflow-y-auto"
       >
-        <button onClick={onClose} className="absolute top-4 right-6 text-4xl text-red-400 hover:text-red-300 z-10">
-          ×
-        </button>
+        <div className="sticky top-0 bg-black/80 backdrop-blur-md p-6 border-b-4 border-cyan-500">
+          <button onClick={onClose} className="absolute top-6 right-6 text-4xl text-red-400">
+            ×
+          </button>
+          <h2 className="text-3xl md:text-4xl font-bold text-cyan-300 text-center pr-10">{title}</h2>
+        </div>
 
-        <h2 className="text-4xl font-bold text-cyan-300 text-center mb-10">{title}</h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="p-6 space-y-10">
+          {/* You Give */}
           <div>
-            <h3 className="text-3xl font-bold text-green-400 mb-6 text-center">YOU GIVE</h3>
-            <div className="grid grid-cols-3 gap-4">
-              {my_properties.map((p: Property) => (
-                <PropertyCard
-                  key={p.id}
-                  prop={p}
-                  isSelected={offerProperties.includes(p.id)}
-                  onClick={() => toggleSelect(p.id, offerProperties, setOfferProperties)}
-                />
-              ))}
+            <h3 className="text-2xl md:text-3xl font-bold text-green-400 mb-6 text-center">YOU GIVE</h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {my_properties.length > 0 ? (
+                my_properties.map((p: Property) => (
+                  <PropertyCard
+                    key={p.id}
+                    prop={p}
+                    isSelected={offerProperties.includes(p.id)}
+                    onClick={() => toggleSelect(p.id, offerProperties, setOfferProperties)}
+                  />
+                ))
+              ) : (
+                <div className="col-span-full text-center text-gray-500 py-8">No properties</div>
+              )}
             </div>
             <input
               type="number"
               placeholder="Cash Offer"
               value={offerCash || ""}
               onChange={(e) => setOfferCash(Math.max(0, Number(e.target.value) || 0))}
-              className="w-full mt-8 bg-black/60 border-3 border-green-500 rounded-2xl px-6 py-5 text-green-400 font-bold text-3xl text-center placeholder-green-700"
+              className="w-full mt-8 bg-black/70 border-4 border-green-500 rounded-2xl px-6 py-6 text-green-400 font-bold text-3xl text-center placeholder-green-700"
             />
           </div>
 
+          {/* You Get */}
           <div>
-            <h3 className="text-3xl font-bold text-red-400 mb-6 text-center">YOU GET</h3>
-            <div className="grid grid-cols-3 gap-4">
+            <h3 className="text-2xl md:text-3xl font-bold text-red-400 mb-6 text-center">YOU GET</h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               {targetOwnedProps.length > 0 ? (
                 targetOwnedProps.map((p: Property) => (
                   <PropertyCard
@@ -812,9 +726,7 @@ function TradeModal({
                   />
                 ))
               ) : (
-                <div className="col-span-3 text-center text-gray-500 py-12 text-xl">
-                  No properties available
-                </div>
+                <div className="col-span-full text-center text-gray-500 py-8">No properties available</div>
               )}
             </div>
             <input
@@ -822,21 +734,25 @@ function TradeModal({
               placeholder="Cash Request"
               value={requestCash || ""}
               onChange={(e) => setRequestCash(Math.max(0, Number(e.target.value) || 0))}
-              className="w-full mt-8 bg-black/60 border-3 border-red-500 rounded-2xl px-6 py-5 text-red-400 font-bold text-3xl text-center placeholder-red-700"
+              className="w-full mt-8 bg-black/70 border-4 border-red-500 rounded-2xl px-6 py-6 text-red-400 font-bold text-3xl text-center placeholder-red-700"
             />
           </div>
-        </div>
 
-        <div className="flex justify-center gap-8 mt-12">
-          <button onClick={onClose} className="px-12 py-6 bg-gray-800 rounded-2xl font-bold text-3xl text-gray-300 hover:bg-gray-700">
-            CANCEL
-          </button>
-          <button
-            onClick={onSubmit}
-            className="px-16 py-6 bg-gradient-to-r from-cyan-500 to-purple-600 rounded-2xl font-bold text-3xl text-white shadow-2xl hover:shadow-cyan-500/70"
-          >
-            SEND DEAL
-          </button>
+          {/* Action Buttons */}
+          <div className="flex flex-col md:flex-row gap-6 pt-6">
+            <button
+              onClick={onClose}
+              className="flex-1 py-6 bg-gray-800 rounded-2xl font-bold text-3xl text-gray-300 hover:bg-gray-700"
+            >
+              CANCEL
+            </button>
+            <button
+              onClick={onSubmit}
+              className="flex-1 py-6 bg-gradient-to-r from-cyan-500 to-purple-600 rounded-2xl font-bold text-3xl text-white shadow-2xl"
+            >
+              SEND DEAL
+            </button>
+          </div>
         </div>
       </motion.div>
     </motion.div>
