@@ -29,6 +29,7 @@ export default function GamePlayers({
 
   const [showEmpire, setShowEmpire] = useState(false);
   const [showTrade, setShowTrade] = useState(false);
+  const [showMyTradesPopup, setShowMyTradesPopup] = useState(false); // New popup state
   const [openTrades, setOpenTrades] = useState<any[]>([]);
   const [tradeRequests, setTradeRequests] = useState<any[]>([]);
   const [tradeModal, setTradeModal] = useState<{ open: boolean; target: Player | null }>({
@@ -187,6 +188,10 @@ export default function GamePlayers({
       if (res.success) {
         toast.success(`Trade ${action}`);
         fetchTrades();
+        // Close popup if we're cancelling an active trade
+        if (action === "declined" && openTrades.some(t => t.id === id)) {
+          setShowMyTradesPopup(false);
+        }
         return;
       }
       toast.error("Failed to update trade");
@@ -319,6 +324,9 @@ export default function GamePlayers({
     }
   };
 
+  // Total active trades count (outgoing + incoming)
+  const totalActiveTrades = openTrades.length + tradeRequests.length;
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#0a0e17] to-[#1a0033] text-white overflow-y-auto">
       <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-pink-500 via-cyan-400 to-purple-600 shadow-lg" />
@@ -434,15 +442,28 @@ export default function GamePlayers({
           </AnimatePresence>
         </div>
 
-        <div className="border-t-4 border-pink-600 pt-8">
+        <div className="border-t-4 border-pink-600 pt-8 space-y-6">
+          {/* My Active Trades Button - always visible and easy to tap */}
+          <button
+            onClick={() => setShowMyTradesPopup(true)}
+            className="w-full py-5 bg-gradient-to-r from-yellow-600 to-orange-600 rounded-2xl font-bold text-3xl text-white shadow-2xl flex items-center justify-center gap-4"
+          >
+            <span>📤 MY ACTIVE TRADES</span>
+            {openTrades.length > 0 && (
+              <span className="bg-black/50 px-4 py-2 rounded-full text-2xl">
+                {openTrades.length}
+              </span>
+            )}
+          </button>
+
+          {/* Incoming Trades Section */}
           <button
             onClick={toggleTrade}
-            className="w-full text-2xl md:text-3xl font-bold text-pink-300 flex justify-between items-center pb-4"
+            className="w-full text-2xl md:text-3xl font-bold text-pink-300 flex justify-between items-center"
           >
             <span>
-              TRADES
-              {(tradeRequests.length > 0 || openTrades.length > 0) &&
-                ` (${tradeRequests.length + openTrades.length} active)`}
+              INCOMING TRADES
+              {tradeRequests.length > 0 && ` (${tradeRequests.length})`}
             </span>
             <motion.span
               animate={{ rotate: showTrade ? 180 : 0 }}
@@ -459,144 +480,64 @@ export default function GamePlayers({
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
-                className="overflow-hidden space-y-12"
+                className="overflow-hidden space-y-6"
               >
-                {/* MY ACTIVE TRADES - Always shown first and visible immediately on mobile */}
-                <div>
-                  <h4 className="text-2xl md:text-3xl font-bold text-cyan-400 mb-6 flex items-center gap-3">
-                    <span>📤</span>
-                    <span>MY ACTIVE TRADES</span>
-                    {openTrades.length > 0 && <span className="ml-2 text-yellow-300">({openTrades.length})</span>}
-                  </h4>
+                {tradeRequests.length > 0 ? (
+                  tradeRequests.map((trade) => {
+                    const offeredProps = properties.filter((p) =>
+                      trade.offer_properties?.includes(p.id)
+                    );
+                    const requestedProps = properties.filter((p) =>
+                      trade.requested_properties?.includes(p.id)
+                    );
+                    const fromPlayer = game.players.find(
+                      (pl) => pl.user_id === trade.player_id
+                    );
 
-                  {openTrades.length > 0 ? (
-                    <div className="space-y-6">
-                      {openTrades.map((trade) => {
-                        const offeredProps = properties.filter((p) =>
-                          trade.offer_properties?.includes(p.id)
-                        );
-                        const requestedProps = properties.filter((p) =>
-                          trade.requested_properties?.includes(p.id)
-                        );
-                        const targetPlayer = game.players.find(
-                          (pl) => pl.user_id === trade.target_player_id
-                        );
-
-                        return (
-                          <motion.div
-                            key={trade.id}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="bg-gradient-to-br from-purple-900/60 to-cyan-900/40 border-4 border-cyan-500 rounded-2xl p-6"
+                    return (
+                      <motion.div
+                        key={trade.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-gradient-to-br from-purple-900/60 to-cyan-900/40 border-4 border-cyan-500 rounded-2xl p-6"
+                      >
+                        <div className="font-bold text-xl md:text-2xl text-cyan-300 mb-4">
+                          From {fromPlayer?.username || fromPlayer?.address?.slice(0, 8)}
+                        </div>
+                        <div className="space-y-4 text-base md:text-lg">
+                          <div className="text-green-400">
+                            Gives: {offeredProps.length ? offeredProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.offer_amount || 0}
+                          </div>
+                          <div className="text-red-400">
+                            Wants: {requestedProps.length ? requestedProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.requested_amount || 0}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                          <button
+                            onClick={() => handleTradeAction(trade.id, "accepted")}
+                            className="py-4 bg-green-600 rounded-xl font-bold text-white text-lg md:text-xl"
                           >
-                            <div className="font-bold text-xl md:text-2xl text-cyan-300 mb-4">
-                              With {targetPlayer?.username || targetPlayer?.address?.slice(0, 8)}
-                            </div>
-                            <div className="space-y-4 text-base md:text-lg">
-                              <div className="text-green-400">
-                                Gives: {offeredProps.length ? offeredProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.offer_amount || 0}
-                              </div>
-                              <div className="text-red-400">
-                                Wants: {requestedProps.length ? requestedProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.requested_amount || 0}
-                              </div>
-                            </div>
-                            <div className="mt-6 flex justify-between items-center">
-                              <span className={`px-5 py-3 rounded-xl text-center font-bold text-lg ${
-                                trade.status === 'accepted' ? "bg-green-900/50 text-green-300" :
-                                trade.status === 'declined' ? "bg-red-900/50 text-red-300" :
-                                "bg-yellow-900/50 text-yellow-300"
-                              }`}>
-                                {trade.status.toUpperCase()}
-                              </span>
-                              {trade.status === 'pending' && (
-                                <button
-                                  onClick={() => handleTradeAction(trade.id, "declined")}
-                                  className="py-3 px-6 bg-red-600 rounded-xl font-bold text-white text-lg"
-                                >
-                                  CANCEL
-                                </button>
-                              )}
-                            </div>
-                          </motion.div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="text-center text-gray-500 py-8">
-                      <p className="text-xl">No active trades</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* INCOMING REQUESTS */}
-                {tradeRequests.length > 0 && (
-                  <div>
-                    <h4 className="text-2xl md:text-3xl font-bold text-cyan-400 mb-6 flex items-center gap-3">
-                      <span>📥</span>
-                      <span>INCOMING REQUESTS</span>
-                    </h4>
-                    <div className="space-y-6">
-                      {tradeRequests.map((trade) => {
-                        const offeredProps = properties.filter((p) =>
-                          trade.offer_properties?.includes(p.id)
-                        );
-                        const requestedProps = properties.filter((p) =>
-                          trade.requested_properties?.includes(p.id)
-                        );
-                        const fromPlayer = game.players.find(
-                          (pl) => pl.user_id === trade.player_id
-                        );
-
-                        return (
-                          <motion.div
-                            key={trade.id}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="bg-gradient-to-br from-purple-900/60 to-cyan-900/40 border-4 border-cyan-500 rounded-2xl p-6"
+                            ACCEPT
+                          </button>
+                          <button
+                            onClick={() => handleTradeAction(trade.id, "declined")}
+                            className="py-4 bg-red-600 rounded-xl font-bold text-white text-lg md:text-xl"
                           >
-                            <div className="font-bold text-xl md:text-2xl text-cyan-300 mb-4">
-                              From {fromPlayer?.username || fromPlayer?.address?.slice(0, 8)}
-                            </div>
-                            <div className="space-y-4 text-base md:text-lg">
-                              <div className="text-green-400">
-                                Gives: {offeredProps.length ? offeredProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.offer_amount || 0}
-                              </div>
-                              <div className="text-red-400">
-                                Wants: {requestedProps.length ? requestedProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.requested_amount || 0}
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-                              <button
-                                onClick={() => handleTradeAction(trade.id, "accepted")}
-                                className="py-4 bg-green-600 rounded-xl font-bold text-white text-lg md:text-xl"
-                              >
-                                ACCEPT
-                              </button>
-                              <button
-                                onClick={() => handleTradeAction(trade.id, "declined")}
-                                className="py-4 bg-red-600 rounded-xl font-bold text-white text-lg md:text-xl"
-                              >
-                                DECLINE
-                              </button>
-                              <button
-                                onClick={() => handleTradeAction(trade.id, "counter")}
-                                className="py-4 bg-yellow-600 rounded-xl font-bold text-black text-lg md:text-xl"
-                              >
-                                COUNTER
-                              </button>
-                            </div>
-                          </motion.div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* EMPTY STATE - only when both sections are empty */}
-                {openTrades.length === 0 && tradeRequests.length === 0 && (
-                  <div className="text-center text-gray-500 py-20">
-                    <div className="text-7xl mb-6">💱</div>
-                    <p className="text-2xl">No trades yet..</p>
+                            DECLINE
+                          </button>
+                          <button
+                            onClick={() => handleTradeAction(trade.id, "counter")}
+                            className="py-4 bg-yellow-600 rounded-xl font-bold text-black text-lg md:text-xl"
+                          >
+                            COUNTER
+                          </button>
+                        </div>
+                      </motion.div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center text-gray-500 py-12">
+                    <p className="text-xl">No incoming trade requests</p>
                   </div>
                 )}
               </motion.div>
@@ -605,6 +546,95 @@ export default function GamePlayers({
         </div>
       </div>
 
+      {/* MY ACTIVE TRADES POPUP */}
+      <AnimatePresence>
+        {showMyTradesPopup && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/90 backdrop-blur-xl flex items-center justify-center z-50 p-4"
+            onClick={() => setShowMyTradesPopup(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 50 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 50 }}
+              transition={{ type: "spring", damping: 30, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-gradient-to-b from-purple-900 to-cyan-900 rounded-3xl border-4 border-cyan-400 shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+            >
+              <div className="sticky top-0 bg-black/80 backdrop-blur-lg p-6 border-b-4 border-cyan-500 flex justify-between items-center">
+                <h2 className="text-3xl font-bold text-cyan-300">📤 MY ACTIVE TRADES</h2>
+                <button
+                  onClick={() => setShowMyTradesPopup(false)}
+                  className="text-4xl text-red-400"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                {openTrades.length > 0 ? (
+                  openTrades.map((trade) => {
+                    const offeredProps = properties.filter((p) =>
+                      trade.offer_properties?.includes(p.id)
+                    );
+                    const requestedProps = properties.filter((p) =>
+                      trade.requested_properties?.includes(p.id)
+                    );
+                    const targetPlayer = game.players.find(
+                      (pl) => pl.user_id === trade.target_player_id
+                    );
+
+                    return (
+                      <div
+                        key={trade.id}
+                        className="bg-gradient-to-br from-purple-900/60 to-cyan-900/40 border-4 border-cyan-500 rounded-2xl p-6"
+                      >
+                        <div className="font-bold text-xl text-cyan-300 mb-4">
+                          With {targetPlayer?.username || targetPlayer?.address?.slice(0, 8)}
+                        </div>
+                        <div className="space-y-4 text-base">
+                          <div className="text-green-400">
+                            Gives: {offeredProps.length ? offeredProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.offer_amount || 0}
+                          </div>
+                          <div className="text-red-400">
+                            Wants: {requestedProps.length ? requestedProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.requested_amount || 0}
+                          </div>
+                        </div>
+                        <div className="mt-6 flex justify-between items-center">
+                          <span className={`px-5 py-3 rounded-xl text-center font-bold text-lg ${
+                            trade.status === 'accepted' ? "bg-green-900/50 text-green-300" :
+                            trade.status === 'declined' ? "bg-red-900/50 text-red-300" :
+                            "bg-yellow-900/50 text-yellow-300"
+                          }`}>
+                            {trade.status.toUpperCase()}
+                          </span>
+                          {trade.status === 'pending' && (
+                            <button
+                              onClick={() => handleTradeAction(trade.id, "declined")}
+                              className="py-3 px-8 bg-red-600 rounded-xl font-bold text-white text-lg"
+                            >
+                              CANCEL
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center text-gray-400 py-16">
+                    <p className="text-2xl">No active trades right now</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Other modals remain unchanged */}
       <AnimatePresence>
         {isNext && selectedProperty && (
           <motion.div
@@ -683,6 +713,7 @@ export default function GamePlayers({
   );
 }
 
+/* TradeModal component remains exactly the same */
 function TradeModal({
   open,
   title,
