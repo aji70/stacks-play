@@ -8,7 +8,6 @@ import { getPlayerSymbol } from "@/lib/types/symbol";
 import toast from "react-hot-toast";
 import { apiClient } from "@/lib/api";
 import { ApiResponse } from "@/types/api";
-import { useMediaQuery } from "@/components/useMediaQuery";
 
 interface GamePlayersProps {
   game: Game;
@@ -27,7 +26,6 @@ export default function GamePlayers({
 }: GamePlayersProps) {
   const { userData } = useStacks();
   const address = userData?.addresses?.stx?.[0]?.address;
-  const isMobile = useMediaQuery("(max-width: 1024px)");
 
   const [showEmpire, setShowEmpire] = useState(false);
   const [showTrade, setShowTrade] = useState(false);
@@ -47,8 +45,6 @@ export default function GamePlayers({
   const [offerCash, setOfferCash] = useState<number>(0);
   const [requestCash, setRequestCash] = useState<number>(0);
 
-  const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
-
   const toggleEmpire = useCallback(() => setShowEmpire((p) => !p), []);
   const toggleTrade = useCallback(() => setShowTrade((p) => !p), []);
   const isNext = me && game.next_player_id === me.user_id;
@@ -65,6 +61,7 @@ export default function GamePlayers({
       game_properties.find((gp) => gp.property_id === property_id)?.mortgaged ?? false,
     [game_properties]
   );
+  const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
 
   const developmentStage = useCallback(
     (property_id: number) =>
@@ -77,68 +74,73 @@ export default function GamePlayers({
       const property = properties.find((p) => p.id === property_id);
       const dev = developmentStage(property_id);
       switch (dev) {
-        case 1: return property?.rent_one_house;
-        case 2: return property?.rent_two_houses;
-        case 3: return property?.rent_three_houses;
-        case 4: return property?.rent_four_houses;
-        case 5: return property?.rent_hotel;
-        default: return property?.rent_site_only;
+        case 1:
+          return property?.rent_one_house;
+        case 2:
+          return property?.rent_two_houses;
+        case 3:
+          return property?.rent_three_houses;
+        case 4:
+          return property?.rent_four_houses;
+        case 5:
+          return property?.rent_hotel;
+        default:
+          return property?.rent_site_only;
       }
     },
     [properties, developmentStage]
   );
 
   const sortedPlayers = useMemo(
-     () =>
-       [...(game?.players ?? [])].sort(
-         (a, b) => (a.turn_order ?? Infinity) - (b.turn_order ?? Infinity)
-       ),
-     [game?.players]
-   );
- 
-   const fetchTrades = useCallback(async () => {
-     if (!me || !game?.id) return;
-     try {
-       const [_initiated, _incoming] = await Promise.all([
-         apiClient.get<ApiResponse<any[]>>(`/game-trade-requests/my/${game.id}/player/${me.user_id}`),
-         apiClient.get<ApiResponse<any[]>>(`/game-trade-requests/incoming/${game.id}/player/${me.user_id}`),
-       ]);
- 
-       // Fixed: .data is the array, not .data.data
-       const initiated = _initiated.data || [];
-       const incoming = _incoming.data || [];
- 
-       setOpenTrades(initiated);
-       setTradeRequests(incoming);
-     } catch (err) {
-       console.error("Error loading trades:", err);
-       toast.error("Failed to load trades");
-     }
-   }, [me, game?.id]);
- 
-   useEffect(() => {
-     if (!me || !game?.id) return;
-     let isFetching = false;
-     let interval: NodeJS.Timeout;
- 
-     const startPolling = async () => {
-       await fetchTrades();
- 
-       interval = setInterval(async () => {
-         if (isFetching) return;
-         isFetching = true;
-         try {
-           await fetchTrades();
-         } finally {
-           isFetching = false;
-         }
-       }, 5000);
-     };
- 
-     startPolling();
- 
-     return () => clearInterval(interval);
-   }, [fetchTrades, me, game?.id]);
+    () =>
+      [...(game?.players ?? [])].sort(
+        (a, b) => (a.turn_order ?? Infinity) - (b.turn_order ?? Infinity)
+      ),
+    [game?.players]
+  );
+
+  const fetchTrades = useCallback(async () => {
+    if (!me || !game?.id) return;
+    try {
+      const [_initiated, _incoming] = await Promise.all([
+        apiClient.get<ApiResponse<any[]>>(`/game-trade-requests/my/${game.id}/player/${me.user_id}`),
+        apiClient.get<ApiResponse<any[]>>(`/game-trade-requests/incoming/${game.id}/player/${me.user_id}`),
+      ]);
+
+      const initiated = _initiated.data || [];
+      const incoming = _incoming.data || [];
+
+      setOpenTrades(initiated);
+      setTradeRequests(incoming);
+    } catch (err) {
+      console.error("Error loading trades:", err);
+      toast.error("Failed to load trades");
+    }
+  }, [me, game?.id]);
+
+  useEffect(() => {
+    if (!me || !game?.id) return;
+    let isFetching = false;
+    let interval: NodeJS.Timeout;
+
+    const startPolling = async () => {
+      await fetchTrades();
+
+      interval = setInterval(async () => {
+        if (isFetching) return;
+        isFetching = true;
+        try {
+          await fetchTrades();
+        } finally {
+          isFetching = false;
+        }
+      }, 5000);
+    };
+
+    startPolling();
+
+    return () => clearInterval(interval);
+  }, [fetchTrades, me, game?.id]);
 
   const handleCreateTrade = async () => {
     if (!me || !tradeModal.target) return;
@@ -161,9 +163,9 @@ export default function GamePlayers({
         setTradeModal({ open: false, target: null });
         resetTradeFields();
         fetchTrades();
-      } else {
-        toast.error(res.message || "Failed to create trade");
+        return;
       }
+      toast.error(res.message || "Failed to create trade");
     } catch (error: any) {
       console.error(error);
       toast.error(error?.message || "Failed to create trade");
@@ -184,9 +186,9 @@ export default function GamePlayers({
       if (res.success) {
         toast.success(`Trade ${action}`);
         fetchTrades();
-      } else {
-        toast.error("Failed to update trade");
+        return;
       }
+      toast.error("Failed to update trade");
     } catch (error) {
       console.error(error);
       toast.error("Failed to update trade");
@@ -209,9 +211,9 @@ export default function GamePlayers({
         setCounterModal({ open: false, trade: null });
         resetTradeFields();
         fetchTrades();
-      } else {
-        toast.error("Failed to send counter trade");
+        return;
       }
+      toast.error("Failed to send counter trade");
     } catch (error) {
       console.error(error);
       toast.error("Failed to send counter trade");
@@ -230,49 +232,89 @@ export default function GamePlayers({
 
   const handleDevelopment = async (id: number) => {
     if (!isNext || !me) return;
+
     try {
-      const payload = { game_id: game.id, user_id: me.user_id, property_id: id };
+      const payload = {
+        game_id: game.id,
+        user_id: me.user_id,
+        property_id: id,
+      };
+
       const res = await apiClient.post<ApiResponse>("/game-properties/development", payload);
-      if (res.success) toast.success("Property developed successfully");
-      else toast.error(res.message ?? "Failed to develop property.");
+      if (res.success) {
+        toast.success("Property development successfully");
+        return;
+      }
+      toast.error(res.message ?? "Failed to develop property.");
     } catch (error: any) {
-      toast.error(error?.message || "Failed to develop property.");
+      console.error(error);
+      toast.error(error?.message || "Failed to develop property..");
     }
   };
 
   const handleDowngrade = async (id: number) => {
     if (!isNext || !me) return;
+
     try {
-      const payload = { game_id: game.id, user_id: me.user_id, property_id: id };
+      const payload = {
+        game_id: game.id,
+        user_id: me.user_id,
+        property_id: id,
+      };
+
       const res = await apiClient.post<ApiResponse>("/game-properties/downgrade", payload);
-      if (res.success) toast.success("Property downgraded successfully");
-      else toast.error(res.message ?? "Failed to downgrade property.");
+      if (res.success) {
+        toast.success("Property downgraded successfully");
+        return;
+      }
+      toast.error(res.message ?? "Failed to downgrade property.");
     } catch (error: any) {
-      toast.error(error?.message || "Failed to downgrade property.");
+      console.error(error);
+      toast.error(error?.message || "Failed to downgrade property..");
     }
   };
 
   const handleMortgage = async (id: number) => {
     if (!isNext || !me) return;
+
     try {
-      const payload = { game_id: game.id, user_id: me.user_id, property_id: id };
+      const payload = {
+        game_id: game.id,
+        user_id: me.user_id,
+        property_id: id,
+      };
+
       const res = await apiClient.post<ApiResponse>("/game-properties/mortgage", payload);
-      if (res.success) toast.success("Property mortgaged successfully");
-      else toast.error(res.message ?? "Failed to mortgage property.");
+      if (res.success) {
+        toast.success("Property mortgaged successfully");
+        return;
+      }
+      toast.error(res.message ?? "Failed to mortgage property.");
     } catch (error: any) {
-      toast.error(error?.message || "Failed to mortgage property.");
+      console.error(error);
+      toast.error(error?.message || "Failed to mortgage property..");
     }
   };
 
   const handleUnmortgage = async (id: number) => {
     if (!isNext || !me) return;
+
     try {
-      const payload = { game_id: game.id, user_id: me.user_id, property_id: id };
+      const payload = {
+        game_id: game.id,
+        user_id: me.user_id,
+        property_id: id,
+      };
+
       const res = await apiClient.post<ApiResponse>("/game-properties/unmortgage", payload);
-      if (res.success) toast.success("Property unmortgaged successfully");
-      else toast.error(res.message ?? "Failed to unmortgage property.");
+      if (res.success) {
+        toast.success("Property unmortgaged successfully");
+        return;
+      }
+      toast.error(res.message ?? "Failed to unmortgage property.");
     } catch (error: any) {
-      toast.error(error?.message || "Failed to unmortgage property.");
+      console.error(error);
+      toast.error(error?.message || "Failed to unmortgage property..");
     }
   };
 
@@ -280,7 +322,7 @@ export default function GamePlayers({
     <div className="min-h-screen bg-gradient-to-b from-[#0a0e17] to-[#1a0033] text-white overflow-y-auto">
       <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-pink-500 via-cyan-400 to-purple-600 shadow-lg" />
 
-      <div className="p-4 md:p-6 space-y-6">
+      <div className="p-5 md:p-8 space-y-8">
         <motion.h2
           animate={{ textShadow: ["0 0 10px #0ff", "0 0 20px #0ff", "0 0 10px #0ff"] }}
           transition={{ duration: 2, repeat: Infinity }}
@@ -289,8 +331,8 @@ export default function GamePlayers({
           PLAYERS
         </motion.h2>
 
-        {/* Players List */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Players List - Mobile: 1 column, Desktop: 2 columns */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {sortedPlayers.map((player) => {
             const isWinner = player.user_id === game.winner_id;
             const isNextTurn = player.user_id === game.next_player_id;
@@ -300,11 +342,11 @@ export default function GamePlayers({
             return (
               <motion.div
                 key={player.user_id}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                className={`p-5 rounded-2xl border-3 transition-all ${
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                className={`p-6 rounded-2xl border-4 transition-all ${
                   isNextTurn
-                    ? "border-cyan-400 bg-cyan-900/50 shadow-xl shadow-cyan-400/70"
+                    ? "border-cyan-400 bg-cyan-900/50 shadow-2xl shadow-cyan-400/70"
                     : "border-purple-800 bg-purple-900/30"
                 }`}
               >
@@ -314,7 +356,7 @@ export default function GamePlayers({
                     <div>
                       <div className="font-bold text-xl md:text-2xl text-cyan-200">
                         {player.username || player.address?.slice(0, 8)}
-                        {isMe && <span className="block text-sm md:text-base text-green-400">YOU</span>}
+                        {isMe && <span className="block text-sm text-green-400">YOU</span>}
                         {isWinner && " 👑"}
                       </div>
                     </div>
@@ -328,7 +370,7 @@ export default function GamePlayers({
                   <motion.button
                     whileTap={{ scale: 0.95 }}
                     onClick={() => startTrade(player)}
-                    className="w-full py-3 bg-gradient-to-r from-pink-600 to-purple-600 rounded-xl font-bold text-xl text-white shadow-lg"
+                    className="w-full py-4 bg-gradient-to-r from-pink-600 to-purple-600 rounded-xl font-bold text-xl md:text-2xl text-white shadow-xl"
                   >
                     TRADE
                   </motion.button>
@@ -339,7 +381,7 @@ export default function GamePlayers({
         </div>
 
         {/* My Empire Section */}
-        <div className="border-t-4 border-purple-600 pt-6">
+        <div className="border-t-4 border-purple-600 pt-8">
           <button
             onClick={toggleEmpire}
             className="w-full text-2xl md:text-3xl font-bold text-purple-300 flex justify-between items-center"
@@ -347,7 +389,7 @@ export default function GamePlayers({
             <span>MY EMPIRE</span>
             <motion.span
               animate={{ rotate: showEmpire ? 180 : 0 }}
-              transition={{ duration: 0.25 }}
+              transition={{ duration: 0.3 }}
               className="text-4xl md:text-5xl text-cyan-400"
             >
               ▼
@@ -360,31 +402,31 @@ export default function GamePlayers({
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
-                className="overflow-hidden mt-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+                className="overflow-hidden mt-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5"
               >
                 {my_properties.length > 0 ? (
-                  my_properties.map((prop, i) => (
+                  my_properties.map((prop, index) => (
                     <motion.div
                       key={prop.id}
-                      initial={{ opacity: 0, y: 20 }}
+                      initial={{ opacity: 0, y: 30 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.05 }}
+                      transition={{ delay: index * 0.05 }}
                       onClick={() => setSelectedProperty(prop)}
                       whileTap={{ scale: 0.95 }}
-                      className="bg-black/70 border-3 border-cyan-600 rounded-xl p-4 cursor-pointer shadow-xl"
+                      className="bg-black/70 border-4 border-cyan-600 rounded-2xl p-5 cursor-pointer shadow-2xl"
                     >
                       {prop.color && (
-                        <div className="h-4 rounded-t-xl -m-4 -mt-4 mb-3" style={{ backgroundColor: prop.color }} />
+                        <div className="h-6 rounded-t-2xl -m-5 -mt-5 mb-4" style={{ backgroundColor: prop.color }} />
                       )}
-                      <div className="text-base md:text-lg font-bold text-cyan-200 truncate">{prop.name}</div>
-                      <div className="text-sm text-green-400 mt-1">Rent: ${rentPrice(prop.id)}</div>
+                      <div className="text-lg md:text-xl font-bold text-cyan-200 text-center truncate">{prop.name}</div>
+                      <div className="text-base text-green-400 mt-2 text-center">Rent: ${rentPrice(prop.id)}</div>
                       {isMortgaged(prop.id) && (
-                        <div className="text-red-500 text-sm mt-2 font-bold animate-pulse">MORTGAGED</div>
+                        <div className="text-red-500 text-sm mt-3 font-bold text-center animate-pulse">MORTGAGED</div>
                       )}
                     </motion.div>
                   ))
                 ) : (
-                  <div className="col-span-full text-center text-gray-400 py-12 text-xl">
+                  <div className="col-span-full text-center text-gray-400 py-16 text-xl">
                     No properties yet..
                   </div>
                 )}
@@ -394,15 +436,15 @@ export default function GamePlayers({
         </div>
 
         {/* Trades Section */}
-        <div className="border-t-4 border-pink-600 pt-6 pb-10">
+        <div className="border-t-4 border-pink-600 pt-8 pb-20">
           <button
             onClick={toggleTrade}
             className="w-full text-2xl md:text-3xl font-bold text-pink-300 flex justify-between items-center"
           >
-            <span>TRADES {tradeRequests.length > 0 && `(${tradeRequests.length})`}</span>
+            <span>TRADES {tradeRequests.length > 0 && `(${tradeRequests.length} pending)`}</span>
             <motion.span
               animate={{ rotate: showTrade ? 180 : 0 }}
-              transition={{ duration: 0.25 }}
+              transition={{ duration: 0.3 }}
               className="text-4xl md:text-5xl text-cyan-400"
             >
               ▼
@@ -417,108 +459,120 @@ export default function GamePlayers({
                 exit={{ height: 0, opacity: 0 }}
                 className="overflow-hidden mt-6 space-y-8"
               >
-                {/* My Active Trades */}
                 {openTrades.length > 0 && (
                   <div>
                     <h4 className="text-2xl md:text-3xl font-bold text-cyan-400 mb-6 flex items-center gap-3">
                       <span>📤</span>
                       <span>MY ACTIVE TRADES</span>
                     </h4>
-                    <div className="space-y-5">
-                      {openTrades.map((trade) => {
-                        const offeredProps = properties.filter((p) => trade.offer_properties?.includes(p.id));
-                        const requestedProps = properties.filter((p) => trade.requested_properties?.includes(p.id));
-                        const targetPlayer = game.players.find((pl) => pl.user_id === trade.target_player_id);
+                    {openTrades.map((trade) => {
+                      const offeredProps = properties.filter((p) =>
+                        trade.offer_properties?.includes(p.id)
+                      );
+                      const requestedProps = properties.filter((p) =>
+                        trade.requested_properties?.includes(p.id)
+                      );
+                      const targetPlayer = game.players.find(
+                        (pl) => pl.user_id === trade.target_player_id
+                      );
 
-                        return (
-                          <div
-                            key={trade.id}
-                            className="bg-gradient-to-br from-purple-900/60 to-cyan-900/40 border-3 border-cyan-500 rounded-2xl p-6"
-                          >
-                            <div className="font-bold text-xl md:text-2xl text-cyan-300 mb-4">
-                              With {targetPlayer?.username || targetPlayer?.address?.slice(0, 8)}
+                      return (
+                        <motion.div
+                          key={trade.id}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="bg-gradient-to-br from-purple-900/60 to-cyan-900/40 border-4 border-cyan-500 rounded-2xl p-6"
+                        >
+                          <div className="font-bold text-xl md:text-2xl text-cyan-300 mb-4">
+                            With {targetPlayer?.username || targetPlayer?.address?.slice(0, 8)}
+                          </div>
+                          <div className="space-y-4 text-base md:text-lg">
+                            <div className="text-green-400">
+                              Gives: {offeredProps.length ? offeredProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.offer_amount || 0}
                             </div>
-                            <div className="space-y-3 text-base md:text-lg">
-                              <div className="text-green-400">
-                                Gives: {offeredProps.length ? offeredProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.offer_amount || 0}
-                              </div>
-                              <div className="text-red-400">
-                                Wants: {requestedProps.length ? requestedProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.requested_amount || 0}
-                              </div>
-                            </div>
-                            <div className={`mt-5 px-4 py-2 rounded-lg text-center font-bold text-lg ${
-                              trade.status === "accepted" ? "bg-green-900/50 text-green-300" :
-                              trade.status === "declined" ? "bg-red-900/50 text-red-300" :
-                              "bg-yellow-900/50 text-yellow-300"
-                            }`}>
-                              {trade.status.toUpperCase()}
+                            <div className="text-red-400">
+                              Wants: {requestedProps.length ? requestedProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.requested_amount || 0}
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
+                          <span className={`mt-5 px-5 py-2 rounded-xl text-center font-bold text-lg ${
+                            trade.status === 'accepted' 
+                              ? 'bg-green-900/50 text-green-300' 
+                              : trade.status === 'declined' 
+                              ? 'bg-red-900/50 text-red-300' 
+                              : 'bg-yellow-900/50 text-yellow-300'
+                          }`}>
+                            {trade.status.toUpperCase()}
+                          </span>
+                        </motion.div>
+                      );
+                    })}
                   </div>
                 )}
 
-                {/* Incoming Trade Requests */}
                 {tradeRequests.length > 0 && (
                   <div>
                     <h4 className="text-2xl md:text-3xl font-bold text-cyan-400 mb-6 flex items-center gap-3">
                       <span>📥</span>
                       <span>INCOMING REQUESTS</span>
                     </h4>
-                    <div className="space-y-5">
-                      {tradeRequests.map((trade) => {
-                        const offeredProps = properties.filter((p) => trade.offer_properties?.includes(p.id));
-                        const requestedProps = properties.filter((p) => trade.requested_properties?.includes(p.id));
-                        const fromPlayer = game.players.find((pl) => pl.user_id === trade.player_id);
+                    {tradeRequests.map((trade) => {
+                      const offeredProps = properties.filter((p) =>
+                        trade.offer_properties?.includes(p.id)
+                      );
+                      const requestedProps = properties.filter((p) =>
+                        trade.requested_properties?.includes(p.id)
+                      );
+                      const fromPlayer = game.players.find(
+                        (pl) => pl.user_id === trade.player_id
+                      );
 
-                        return (
-                          <div
-                            key={trade.id}
-                            className="bg-gradient-to-br from-purple-900/60 to-cyan-900/40 border-3 border-cyan-500 rounded-2xl p-6"
-                          >
-                            <div className="font-bold text-xl md:text-2xl text-cyan-300 mb-4">
-                              From {fromPlayer?.username || fromPlayer?.address?.slice(0, 8)}
+                      return (
+                        <motion.div
+                          key={trade.id}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="bg-gradient-to-br from-purple-900/60 to-cyan-900/40 border-4 border-cyan-500 rounded-2xl p-6"
+                        >
+                          <div className="font-bold text-xl md:text-2xl text-cyan-300 mb-4">
+                            From {fromPlayer?.username || fromPlayer?.address?.slice(0, 8)}
+                          </div>
+                          <div className="space-y-4 text-base md:text-lg">
+                            <div className="text-green-400">
+                              Gives: {offeredProps.length ? offeredProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.offer_amount || 0}
                             </div>
-                            <div className="space-y-3 text-base md:text-lg">
-                              <div className="text-green-400">
-                                Gives: {offeredProps.length ? offeredProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.offer_amount || 0}
-                              </div>
-                              <div className="text-red-400">
-                                Wants: {requestedProps.length ? requestedProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.requested_amount || 0}
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-3 gap-3 mt-6">
-                              <button
-                                onClick={() => handleTradeAction(trade.id, "accepted")}
-                                className="py-4 bg-green-600 rounded-xl font-bold text-white text-lg md:text-xl"
-                              >
-                                ACCEPT
-                              </button>
-                              <button
-                                onClick={() => handleTradeAction(trade.id, "declined")}
-                                className="py-4 bg-red-600 rounded-xl font-bold text-white text-lg md:text-xl"
-                              >
-                                DECLINE
-                              </button>
-                              <button
-                                onClick={() => handleTradeAction(trade.id, "counter")}
-                                className="py-4 bg-yellow-600 rounded-xl font-bold text-black text-lg md:text-xl"
-                              >
-                                COUNTER
-                              </button>
+                            <div className="text-red-400">
+                              Wants: {requestedProps.length ? requestedProps.map((p) => p.name).join(", ") : "nothing"} + ${trade.requested_amount || 0}
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
+                          <div className="grid grid-cols-3 gap-4 mt-6">
+                            <button
+                              onClick={() => handleTradeAction(trade.id, "accepted")}
+                              className="py-4 bg-green-600 rounded-xl font-bold text-white text-lg md:text-xl"
+                            >
+                              ACCEPT
+                            </button>
+                            <button
+                              onClick={() => handleTradeAction(trade.id, "declined")}
+                              className="py-4 bg-red-600 rounded-xl font-bold text-white text-lg md:text-xl"
+                            >
+                              DECLINE
+                            </button>
+                            <button
+                              onClick={() => handleTradeAction(trade.id, "counter")}
+                              className="py-4 bg-yellow-600 rounded-xl font-bold text-black text-lg md:text-xl"
+                            >
+                              COUNTER
+                            </button>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
                   </div>
                 )}
 
                 {openTrades.length === 0 && tradeRequests.length === 0 && (
-                  <div className="text-center text-gray-500 py-16">
-                    <div className="text-6xl mb-4">💱</div>
+                  <div className="text-center text-gray-500 py-20">
+                    <div className="text-7xl mb-6">💱</div>
                     <p className="text-2xl">No trades yet..</p>
                   </div>
                 )}
@@ -528,49 +582,47 @@ export default function GamePlayers({
         </div>
       </div>
 
-      {/* Property Management Modal */}
+      {/* Property Modal - Mobile-friendly */}
       <AnimatePresence>
         {isNext && selectedProperty && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 bg-black/90 backdrop-blur-xl flex items-end justify-center z-50 p-4"
             onClick={() => setSelectedProperty(null)}
           >
             <motion.div
-              initial={{ scale: 0.9, y: 50 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 50 }}
+              initial={{ y: 100 }}
+              animate={{ y: 0 }}
+              exit={{ y: 100 }}
+              transition={{ type: "spring", damping: 30, stiffness: 300 }}
               onClick={(e) => e.stopPropagation()}
-              className="relative bg-gradient-to-br from-purple-900 to-cyan-900 rounded-3xl border-4 border-cyan-400 shadow-2xl p-8 w-full max-w-lg"
+              className="relative bg-gradient-to-t from-purple-900 to-cyan-900 rounded-t-3xl border-t-4 border-x-4 border-cyan-400 shadow-2xl p-8 w-full max-w-2xl"
             >
               <button
                 onClick={() => setSelectedProperty(null)}
-                className="absolute top-4 right-4 text-4xl text-red-400 hover:text-red-300"
+                className="absolute top-6 right-6 text-4xl text-red-400"
               >
                 ×
               </button>
               <h3 className="text-3xl md:text-4xl font-bold text-cyan-300 text-center mb-10">{selectedProperty.name}</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <button onClick={() => { handleDevelopment(selectedProperty.id); setSelectedProperty(null); }} className="py-5 bg-green-600 rounded-2xl font-bold text-white text-xl shadow-lg">BUILD</button>
-                <button onClick={() => { handleDowngrade(selectedProperty.id); setSelectedProperty(null); }} className="py-5 bg-orange-600 rounded-2xl font-bold text-white text-xl shadow-lg">SELL</button>
-                <button onClick={() => { handleMortgage(selectedProperty.id); setSelectedProperty(null); }} className="py-5 bg-blue-600 rounded-2xl font-bold text-white text-xl shadow-lg">MORTGAGE</button>
-                <button onClick={() => { handleUnmortgage(selectedProperty.id); setSelectedProperty(null); }} className="py-5 bg-purple-600 rounded-2xl font-bold text-white text-xl shadow-lg">REDEEM</button>
+              <div className="grid grid-cols-2 gap-6">
+                <button onClick={() => { handleDevelopment(selectedProperty.id); setSelectedProperty(null); }} className="py-6 bg-green-600 rounded-2xl font-bold text-white text-xl md:text-2xl shadow-xl">BUILD</button>
+                <button onClick={() => { handleDowngrade(selectedProperty.id); setSelectedProperty(null); }} className="py-6 bg-orange-600 rounded-2xl font-bold text-white text-xl md:text-2xl shadow-xl">SELL</button>
+                <button onClick={() => { handleMortgage(selectedProperty.id); setSelectedProperty(null); }} className="py-6 bg-blue-600 rounded-2xl font-bold text-white text-xl md:text-2xl shadow-xl">MORTGAGE</button>
+                <button onClick={() => { handleUnmortgage(selectedProperty.id); setSelectedProperty(null); }} className="py-6 bg-purple-600 rounded-2xl font-bold text-white text-xl md:text-2xl shadow-xl">REDEEM</button>
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Trade Modal (Mobile-Optimized) */}
+      {/* Trade Modal - Mobile-optimized (slides up from bottom) */}
       <TradeModal
         open={tradeModal.open}
-        title={`Trade with ${tradeModal.target?.username || "Player"}`}
-        onClose={() => {
-          setTradeModal({ open: false, target: null });
-          resetTradeFields();
-        }}
+        title={`Trade with ${tradeModal.target?.username}`}
+        onClose={() => setTradeModal({ open: false, target: null })}
         onSubmit={handleCreateTrade}
         my_properties={my_properties}
         properties={properties}
@@ -587,14 +639,10 @@ export default function GamePlayers({
         targetPlayerAddress={tradeModal.target?.address}
       />
 
-      {/* Counter Trade Modal */}
       <TradeModal
         open={counterModal.open}
-        title="Counter Offer"
-        onClose={() => {
-          setCounterModal({ open: false, trade: null });
-          resetTradeFields();
-        }}
+        title="Counter Trade Offer"
+        onClose={() => setCounterModal({ open: false, trade: null })}
         onSubmit={submitCounterTrade}
         my_properties={my_properties}
         properties={properties}
@@ -608,13 +656,13 @@ export default function GamePlayers({
         setOfferCash={setOfferCash}
         setRequestCash={setRequestCash}
         toggleSelect={toggleSelect}
-        targetPlayerAddress={game.players.find((p) => p.user_id === counterModal.trade?.player_id)?.address}
+        targetPlayerAddress={game.players.find(p => p.user_id === counterModal.trade?.target_player_id)?.address}
       />
     </div>
   );
 }
 
-/* ==================== Mobile-Friendly Trade Modal ==================== */
+/* --- Mobile-Optimized TradeModal --- */
 function TradeModal({
   open,
   title,
@@ -632,15 +680,15 @@ function TradeModal({
   setOfferCash,
   setRequestCash,
   toggleSelect,
-  targetPlayerAddress,
+  targetPlayerAddress
 }: any) {
   const targetOwnedProps = useMemo(() => {
-    if (!targetPlayerAddress) return [];
     const ownedGameProps = game_properties.filter(
-      (gp: GameProperty) => gp.address === targetPlayerAddress
+      (gp: any) => gp.address === targetPlayerAddress
     );
-    return properties.filter((p: Property) =>
-      ownedGameProps.some((gp: GameProperty) => gp.property_id === p.id)
+
+    return properties.filter((p: any) =>
+      ownedGameProps.some((gp: any) => gp.property_id === p.id)
     );
   }, [game_properties, properties, targetPlayerAddress]);
 
@@ -649,16 +697,16 @@ function TradeModal({
   const PropertyCard = ({ prop, isSelected, onClick }: { prop: Property; isSelected: boolean; onClick: () => void }) => (
     <div
       onClick={onClick}
-      className={`p-4 rounded-2xl border-4 cursor-pointer transition-all flex flex-col gap-3 ${
+      className={`p-5 rounded-2xl border-4 cursor-pointer transition-all flex flex-col gap-3 ${
         isSelected
-          ? "border-cyan-400 bg-cyan-900/70 shadow-2xl shadow-cyan-400/60"
-          : "border-gray-700 hover:border-gray-500 bg-black/50"
+          ? "border-cyan-400 bg-cyan-900/70 shadow-2xl shadow-cyan-400/70"
+          : "border-gray-700 hover:border-gray-500 bg-black/60"
       }`}
     >
       {prop.color && (
-        <div className="h-10 rounded-t-2xl -m-4 -mt-4 mb-4" style={{ backgroundColor: prop.color }} />
+        <div className="h-12 rounded-t-2xl -m-5 -mt-5 mb-5" style={{ backgroundColor: prop.color }} />
       )}
-      <div className="text-lg font-bold text-cyan-200 text-center">{prop.name}</div>
+      <div className="text-lg md:text-xl font-bold text-cyan-200 text-center leading-tight">{prop.name}</div>
     </div>
   );
 
@@ -678,44 +726,38 @@ function TradeModal({
         onClick={(e) => e.stopPropagation()}
         className="relative bg-gradient-to-t from-purple-900 via-black to-cyan-900 rounded-t-3xl border-t-4 border-x-4 border-cyan-500 shadow-2xl w-full max-h-[95vh] overflow-y-auto"
       >
-        <div className="sticky top-0 bg-black/80 backdrop-blur-md p-6 border-b-4 border-cyan-500">
+        <div className="sticky top-0 bg-black/80 backdrop-blur-lg p-6 border-b-4 border-cyan-500">
           <button onClick={onClose} className="absolute top-6 right-6 text-4xl text-red-400">
             ×
           </button>
-          <h2 className="text-3xl md:text-4xl font-bold text-cyan-300 text-center pr-10">{title}</h2>
+          <h2 className="text-3xl md:text-4xl font-bold text-cyan-300 text-center pr-12">{title}</h2>
         </div>
 
-        <div className="p-6 space-y-10">
-          {/* You Give */}
+        <div className="p-6 space-y-12 pb-20">
           <div>
             <h3 className="text-2xl md:text-3xl font-bold text-green-400 mb-6 text-center">YOU GIVE</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {my_properties.length > 0 ? (
-                my_properties.map((p: Property) => (
-                  <PropertyCard
-                    key={p.id}
-                    prop={p}
-                    isSelected={offerProperties.includes(p.id)}
-                    onClick={() => toggleSelect(p.id, offerProperties, setOfferProperties)}
-                  />
-                ))
-              ) : (
-                <div className="col-span-full text-center text-gray-500 py-8">No properties</div>
-              )}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
+              {my_properties.map((p: Property) => (
+                <PropertyCard
+                  key={p.id}
+                  prop={p}
+                  isSelected={offerProperties.includes(p.id)}
+                  onClick={() => toggleSelect(p.id, offerProperties, setOfferProperties)}
+                />
+              ))}
             </div>
             <input
               type="number"
-              placeholder="Cash Offer"
+              placeholder="+$ CASH"
               value={offerCash || ""}
               onChange={(e) => setOfferCash(Math.max(0, Number(e.target.value) || 0))}
               className="w-full mt-8 bg-black/70 border-4 border-green-500 rounded-2xl px-6 py-6 text-green-400 font-bold text-3xl text-center placeholder-green-700"
             />
           </div>
 
-          {/* You Get */}
           <div>
             <h3 className="text-2xl md:text-3xl font-bold text-red-400 mb-6 text-center">YOU GET</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
               {targetOwnedProps.length > 0 ? (
                 targetOwnedProps.map((p: Property) => (
                   <PropertyCard
@@ -726,24 +768,22 @@ function TradeModal({
                   />
                 ))
               ) : (
-                <div className="col-span-full text-center text-gray-500 py-8">No properties available</div>
+                <div className="col-span-full text-center text-gray-500 py-12 text-xl">
+                  No properties available
+                </div>
               )}
             </div>
             <input
               type="number"
-              placeholder="Cash Request"
+              placeholder="+$ CASH"
               value={requestCash || ""}
               onChange={(e) => setRequestCash(Math.max(0, Number(e.target.value) || 0))}
               className="w-full mt-8 bg-black/70 border-4 border-red-500 rounded-2xl px-6 py-6 text-red-400 font-bold text-3xl text-center placeholder-red-700"
             />
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex flex-col md:flex-row gap-6 pt-6">
-            <button
-              onClick={onClose}
-              className="flex-1 py-6 bg-gray-800 rounded-2xl font-bold text-3xl text-gray-300 hover:bg-gray-700"
-            >
+          <div className="flex flex-col md:flex-row gap-6">
+            <button onClick={onClose} className="flex-1 py-6 bg-gray-800 rounded-2xl font-bold text-3xl text-gray-300 hover:bg-gray-700">
               CANCEL
             </button>
             <button
