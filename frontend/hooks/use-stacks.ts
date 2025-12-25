@@ -10,6 +10,10 @@ import {
 import { PostConditionMode } from "@stacks/transactions";
 import { useEffect, useState } from "react";
 
+// ⭐ Get your free Project ID here: https://dashboard.reown.com (formerly WalletConnect Cloud)
+// Put it in .env as NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID or replace below
+const WALLET_CONNECT_PROJECT_ID = process.env.PROJECT_ID; // ← Replace this!
+
 type UserData = {
   addresses: {
     stx: { address: string }[];
@@ -18,8 +22,6 @@ type UserData = {
 };
 
 type Network = "mainnet" | "testnet" | null;
-
-    
 
 export function useStacks() {
   const [userData, setUserData] = useState<UserData | null>(null);
@@ -41,12 +43,18 @@ export function useStacks() {
     }
   }
 
-  function connectWallet() {
-    connect().then(() => {
+  // ⭐ Updated to enable WalletConnect (QR code for mobile wallets)
+  async function connectWallet() {
+    try {
+      await connect({
+        walletConnectProjectId: WALLET_CONNECT_PROJECT_ID, // This adds the WalletConnect option in the modal
+        // forceWalletSelect: true, // Uncomment if you want to always show the wallet selection modal
+      });
+
       handleUserData(getLocalStorage());
-    }).catch((error) => {
+    } catch (error) {
       console.error("Wallet connection failed:", error);
-    });
+    }
   }
 
   function disconnectWallet() {
@@ -55,177 +63,166 @@ export function useStacks() {
     setStxBalance(0);
   }
 
-async function handleRegister(username: string): Promise<string | undefined> {
-  if (typeof window === "undefined") return;
+  async function handleRegister(username: string): Promise<string | undefined> {
+    if (typeof window === "undefined") return;
 
-  try {
-    if (!userData || !network) throw new Error("User not connected");
-    const txOptions = await register(network, username);
+    try {
+      if (!userData || !network) throw new Error("User not connected");
+      const txOptions = await register(network, username);
 
-    return await new Promise<string | undefined>((resolve) => {
-      openContractCall({
-        ...txOptions,
-        postConditionMode: PostConditionMode.Allow,
-        onFinish: (data) => {
-          console.log("TX sent:", data);
-          resolve(data.txId); // return the transaction ID
-        },
-        onCancel: () => {
-          console.log("User canceled registration");
-          resolve(undefined);
-        },
+      return await new Promise<string | undefined>((resolve) => {
+        openContractCall({
+          ...txOptions,
+          postConditionMode: PostConditionMode.Allow,
+          onFinish: (data) => {
+            console.log("TX sent:", data);
+            resolve(data.txId);
+          },
+          onCancel: () => {
+            console.log("User canceled registration");
+            resolve(undefined);
+          },
+        });
       });
-    });
-  } catch (err: unknown) {
-    console.error(err);
-    const message = err instanceof Error ? err.message : String(err);
-    window.alert(message);
-    return undefined;
+    } catch (err: unknown) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : String(err);
+      window.alert(message);
+      return undefined;
+    }
   }
-}
 
-async function handleGetGameByCode(gameCode: string) {
-  if (!userData || !network) return null;
-  return await getGameByCode(network, gameCode);
-  
-}
+  async function handleGetGameByCode(gameCode: string) {
+    if (!userData || !network) return null;
+    return await getGameByCode(network, gameCode);
+  }
 
+  async function handleCreateAiGame(
+    username: string,
+    gameType: number,
+    playerSymbol: number,
+    numberOfAiPlayers: number,
+    code: string,
+    startingBalance: number
+  ): Promise<string | undefined> {
+    if (typeof window === "undefined") return;
 
-async function handleCreateAiGame(
-  username: string,
-  gameType: number,
-  playerSymbol: number,
-  numberOfAiPlayers: number,
-  code: string,
-  startingBalance: number
-): Promise<string | undefined> {
+    try {
+      if (!userData || !network) throw new Error("User not connected");
 
-  if (typeof window === "undefined") return;
+      const txOptions = await createAiGame(
+        network,
+        username,
+        gameType,
+        playerSymbol,
+        numberOfAiPlayers,
+        code,
+        startingBalance
+      );
 
-  try {
-    if (!userData || !network) throw new Error("User not connected");
-
-    const txOptions = await createAiGame(
-      network,
-      username,
-      gameType,
-      playerSymbol,
-      numberOfAiPlayers,
-      code,
-      startingBalance
-    );
-
-    return await new Promise<string | undefined>((resolve, reject) => {
-      openContractCall({
-        ...txOptions,
-        postConditionMode: PostConditionMode.Allow,
-        onFinish: (data) => {
-          console.log("TX sent:", data);
-          resolve(data.txId);   // ⭐ RETURN txId
-        },
-        onCancel: () => {
-          console.log("User canceled");
-          resolve(undefined);
-        }
+      return await new Promise<string | undefined>((resolve) => {
+        openContractCall({
+          ...txOptions,
+          postConditionMode: PostConditionMode.Allow,
+          onFinish: (data) => {
+            console.log("TX sent:", data);
+            resolve(data.txId);
+          },
+          onCancel: () => {
+            console.log("User canceled");
+            resolve(undefined);
+          },
+        });
       });
-    });
-
-  } catch (err: unknown) {
-    console.error(err);
-    const message = err instanceof Error ? err.message : String(err);
-    window.alert(message);
-    return undefined;
+    } catch (err: unknown) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : String(err);
+      window.alert(message);
+      return undefined;
+    }
   }
-}
 
-async function handleCreateGame(
-  gameType: number,
-  playerSymbol: number,
-  numberOfPlayers: number,
-  code: string,
-  startingBalance: number,
-  betAmount: number
-): Promise<string | undefined> {
+  async function handleCreateGame(
+    gameType: number,
+    playerSymbol: number,
+    numberOfPlayers: number,
+    code: string,
+    startingBalance: number,
+    betAmount: number
+  ): Promise<string | undefined> {
+    if (typeof window === "undefined") return;
 
-  if (typeof window === "undefined") return;
+    try {
+      if (!userData || !network) throw new Error("User not connected");
 
-  try {
-    if (!userData || !network) throw new Error("User not connected");
+      const txOptions = await createGame(
+        network,
+        gameType,
+        playerSymbol,
+        numberOfPlayers,
+        code,
+        startingBalance,
+        betAmount
+      );
 
-    const txOptions = await createGame(
-      network,
-      gameType,
-      playerSymbol,
-      numberOfPlayers,
-      code,
-      startingBalance,
-      betAmount
-    );
-
-    return await new Promise<string | undefined>((resolve, reject) => {
-      openContractCall({
-        ...txOptions,
-        postConditionMode: PostConditionMode.Allow,
-        onFinish: (data) => {
-          console.log("TX sent:", data);
-          resolve(data.txId);   // ⭐ RETURN txId
-        },
-        onCancel: () => {
-          console.log("User canceled");
-          resolve(undefined);
-        }
+      return await new Promise<string | undefined>((resolve) => {
+        openContractCall({
+          ...txOptions,
+          postConditionMode: PostConditionMode.Allow,
+          onFinish: (data) => {
+            console.log("TX sent:", data);
+            resolve(data.txId);
+          },
+          onCancel: () => {
+            console.log("User canceled");
+            resolve(undefined);
+          },
+        });
       });
-    });
-
-  } catch (err: unknown) {
-    console.error(err);
-    const message = err instanceof Error ? err.message : String(err);
-    window.alert(message);
-    return undefined;
+    } catch (err: unknown) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : String(err);
+      window.alert(message);
+      return undefined;
+    }
   }
-}
 
-async function handleJoinGamee(
-  gameId: number,
-  playerSymbol: number,
-): Promise<string | undefined> {
+  async function handleJoinGamee(
+    gameId: number,
+    playerSymbol: number,
+  ): Promise<string | undefined> {
+    if (typeof window === "undefined") return;
 
-  if (typeof window === "undefined") return;
+    try {
+      if (!userData || !network) throw new Error("User not connected");
 
-  try {
-    if (!userData || !network) throw new Error("User not connected");
+      const txOptions = await joinGame(
+        network,
+        gameId,
+        playerSymbol,
+      );
 
-    const txOptions = await joinGame(
-      network,
-      gameId,
-      playerSymbol,
-    );
-
-    return await new Promise<string | undefined>((resolve, reject) => {
-      openContractCall({
-        ...txOptions,
-        postConditionMode: PostConditionMode.Allow,
-        onFinish: (data) => {
-          console.log("TX sent:", data);
-          resolve(data.txId);   // ⭐ RETURN txId
-        },
-        onCancel: () => {
-          console.log("User canceled");
-          resolve(undefined);
-        }
+      return await new Promise<string | undefined>((resolve) => {
+        openContractCall({
+          ...txOptions,
+          postConditionMode: PostConditionMode.Allow,
+          onFinish: (data) => {
+            console.log("TX sent:", data);
+            resolve(data.txId);
+          },
+          onCancel: () => {
+            console.log("User canceled");
+            resolve(undefined);
+          },
+        });
       });
-    });
-
-  } catch (err: unknown) {
-    console.error(err);
-    const message = err instanceof Error ? err.message : String(err);
-    window.alert(message);
-    return undefined;
+    } catch (err: unknown) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : String(err);
+      window.alert(message);
+      return undefined;
+    }
   }
-}
-
-
- 
 
   async function checkIfRegistered(): Promise<boolean> {
     if (!userData || !network) return false;
@@ -242,7 +239,7 @@ async function handleJoinGamee(
   async function fetchGameInfo(gameid: number) {
     if (!userData || !network) return null;
     return await getGame(network, gameid);
-  } 
+  }
 
   useEffect(() => {
     if (isConnected()) {
@@ -257,7 +254,6 @@ async function handleJoinGamee(
         setStxBalance(balance);
       });
 
-      // Fetch Tycoon user info
       fetchUserInfo().then(setTycoonUser);
     } else {
       setStxBalance(0);
