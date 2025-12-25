@@ -10,10 +10,8 @@ import {
 import { PostConditionMode } from "@stacks/transactions";
 import { useEffect, useState } from "react";
 
-// ⭐ Get your free Project ID here: https://dashboard.reown.com (formerly WalletConnect Cloud)
-// Put it in .env as NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID or replace below
-const WALLET_CONNECT_PROJECT_ID = process.env.PROJECT_ID; // ← Replace this!
 
+const WALLET_CONNECT_PROJECT_ID = process.env.PROJECT_ID; 
 type UserData = {
   addresses: {
     stx: { address: string }[];
