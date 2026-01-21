@@ -144,6 +144,31 @@
 (define-constant ERR_INVALID_PROPERTY_ID (err u207))
 (define-constant ERR_NOT_PLAYER (err u208))
 
+;; ---- EVENTS ----
+(define-events
+  ;; User registration
+  (event (user-registered (user principal) (username (string-ascii 32)) (registered-at uint)))
+  
+  ;; Game creation
+  (event (game-created (game-id uint) (creator principal) (code (string-ascii 32)) (game-type uint) (bet-amount uint)))
+  
+  ;; Player joined game
+  (event (player-joined (game-id uint) (player principal) (player-symbol uint) (order uint)))
+  
+  ;; Game state updates
+  (event (game-started (game-id uint)))
+  (event (game-ended (game-id uint) (winner principal) (payout uint)))
+  
+  ;; Player position updates
+  (event (player-moved (game-id uint) (player principal) (old-position uint) (new-position uint)))
+  
+  ;; Property ownership changes
+  (event (property-purchased (game-id uint) (property-id uint) (owner principal) (price uint)))
+  
+  ;; Payouts
+  (event (payout-claimed (game-id uint) (winner principal) (amount uint)))
+)
+
 ;; ---- READ-ONLY FUNCTIONS ----
 
 (define-read-only (is-registered (user principal))
@@ -207,6 +232,7 @@
       total-withdrawn: u0
     })
     (map-set usernames username caller)
+(emit-event (user-registered caller username stacks-block-time))
     (ok true)
   )
 )
@@ -283,7 +309,7 @@
       })
       (map-set game-codes code new-game)
       (var-set latest-game-id (+ game-id u1))
-
+       (emit-event (game-created game-id caller code game-type bet-amount))
       (print { action: "create-game", data: new-game })
       (ok game-id)
     )
@@ -431,7 +457,13 @@
 
         ;; Correctly update game-codes map using (get code game)
         (map-set game-codes (get code game) updated-game)
-
+            ;; EMIT EVENT
+    (emit-event (player-joined game-id caller player-symbol order))
+    
+    ;; If game is now full and starting, emit game-started
+    (if (is-eq new-status STATUS_ONGOING)
+      (emit-event (game-started game-id))
+    )
         (print { action: "join-game", game-id: game-id, player: caller, order: order })
         (ok order)
       )
@@ -511,7 +543,7 @@
       (map-set payouts winner total-staked )
       (map-set users winner updated-winner-user)
       (map-set games game-id final-game)
-
+       (emit-event (game-ended game-id winner total-staked))
       (print { action: "finalize-game", winner: winner, reward: total-staked, turns: total-turns })
       (ok total-staked)
     )
