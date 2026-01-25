@@ -8,6 +8,7 @@ import { getPlayerSymbol } from "@/lib/types/symbol";
 import toast from "react-hot-toast";
 import { apiClient } from "@/lib/api";
 import { ApiResponse } from "@/types/api";
+import { usePropertyActions } from "@/hooks/usePropertyActions";
 
 interface GamePlayersProps {
   game: Game;
@@ -351,21 +352,12 @@ export default function GamePlayers({
     }
     setTradeModal({ open: true, target: targetPlayer });
   };
+  const { handleDevelopment } = usePropertyActions(
+    game.id,
+    me?.user_id,
+    true
+  );
 
-  const handleDevelopment = async (id: number) => {
-    if (!isNext || !me) return;
-    try {
-      const res = await apiClient.post<ApiResponse>("/game-properties/development", {
-        game_id: game.id,
-        user_id: me.user_id,
-        property_id: id,
-      });
-      if (res.success) toast.success("Property developed successfully");
-      else toast.error(res.message ?? "Failed to develop property");
-    } catch (error: any) {
-      toast.error(error?.message || "Failed to develop property");
-    }
-  };
 
   const handleDowngrade = async (id: number) => {
     if (!isNext || !me) return;
