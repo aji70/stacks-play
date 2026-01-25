@@ -352,26 +352,11 @@ export default function GamePlayers({
     }
     setTradeModal({ open: true, target: targetPlayer });
   };
-  const { handleDevelopment, handleDowngrade, handleMortgage } = usePropertyActions(
+  const { handleDevelopment, handleDowngrade, handleMortgage, handleUnmortgage } = usePropertyActions(
     game.id,
     me?.user_id,
     true
   );
-
-  const handleUnmortgage = async (id: number) => {
-    if (!isNext || !me) return;
-    try {
-      const res = await apiClient.post<ApiResponse>("/game-properties/unmortgage", {
-        game_id: game.id,
-        user_id: me.user_id,
-        property_id: id,
-      });
-      if (res.success) toast.success("Property unmortgaged successfully");
-      else toast.error(res.message ?? "Failed to unmortgage property");
-    } catch (error: any) {
-      toast.error(error?.message || "Failed to unmortgage property");
-    }
-  };
 
   return (
     <aside className="w-80 h-full bg-gradient-to-b from-[#0a0e17] to-[#1a0033] border-r-4 border-cyan-500 shadow-2xl shadow-cyan-500/50 overflow-y-auto relative">
