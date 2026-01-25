@@ -12,7 +12,7 @@ export const usePropertyActions = (gameId: number, userId: number | undefined, i
         user_id: userId,
         property_id: id,
       });
-      if (res?.data?.success) toast.success("Property developed successfully");
+      if (res?.success) toast.success("Property developed successfully");
     } catch (error: any) {
       toast.error(error?.message || "Failed to develop property");
     }
@@ -26,8 +26,8 @@ export const usePropertyActions = (gameId: number, userId: number | undefined, i
         user_id: userId,
         property_id: id,
       });
-      if (res?.data?.success) toast.success("Property downgraded successfully");
-      else toast.error(res.data?.message ?? "Failed to downgrade property");
+      if (res?.success) toast.success("Property downgraded successfully");
+      else toast.error(res?.message ?? "Failed to downgrade property");
     } catch (error: any) {
       toast.error(error?.message || "Failed to downgrade property");
     }
@@ -41,8 +41,8 @@ export const usePropertyActions = (gameId: number, userId: number | undefined, i
         user_id: userId,
         property_id: id,
       });
-      if (res?.data?.success) toast.success("Property mortgaged successfully");
-      else toast.error(res.data?.message ?? "Failed to mortgage property");
+      if (res?.success) toast.success("Property mortgaged successfully");
+      else toast.error(res?.message ?? "Failed to mortgage property");
     } catch (error: any) {
       toast.error(error?.message || "Failed to mortgage property");
     }
@@ -56,8 +56,8 @@ export const usePropertyActions = (gameId: number, userId: number | undefined, i
         user_id: userId,
         property_id: id,
       });
-      if (res?.data?.success) toast.success("Property unmortgaged successfully");
-      else toast.error(res.data?.message ?? "Failed to unmortgage property");
+      if (res?.success) toast.success("Property unmortgaged successfully");
+      else toast.error(res?.message ?? "Failed to unmortgage property");
     } catch (error: any) {
       toast.error(error?.message || "Failed to unmortgage property");
     }
