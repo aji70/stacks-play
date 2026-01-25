@@ -352,27 +352,12 @@ export default function GamePlayers({
     }
     setTradeModal({ open: true, target: targetPlayer });
   };
-  const { handleDevelopment } = usePropertyActions(
+  const { handleDevelopment, handleDowngrade } = usePropertyActions(
     game.id,
     me?.user_id,
     true
   );
 
-
-  const handleDowngrade = async (id: number) => {
-    if (!isNext || !me) return;
-    try {
-      const res = await apiClient.post<ApiResponse>("/game-properties/downgrade", {
-        game_id: game.id,
-        user_id: me.user_id,
-        property_id: id,
-      });
-      if (res.success) toast.success("Property downgraded successfully");
-      else toast.error(res.message ?? "Failed to downgrade property");
-    } catch (error: any) {
-      toast.error(error?.message || "Failed to downgrade property");
-    }
-  };
 
   const handleMortgage = async (id: number) => {
     if (!isNext || !me) return;
