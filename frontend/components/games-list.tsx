@@ -7,7 +7,23 @@ import { useStacks } from "@/hooks/use-stacks";
 import { useMemo } from "react";
 import { formatStx } from "@/lib/types/stx-utils";
 
-export function GamesList({ games }: { games: Game[] }) {
+export function GamesList({ games, isLoading }: { games: Game[]; isLoading?: boolean }) {
+   if (isLoading) {
+    return (
+      <div className="w-full max-w-4xl space-y-12">
+        {[1, 2, 3].map((section) => (
+          <div key={section}>
+            <div className="h-8 w-48 bg-gray-800 rounded mb-4 animate-pulse" />
+            <div className="flex gap-8 overflow-y-scroll">
+              {[1, 2, 3].map((item) => (
+                <div key={item} className="shrink-0 w-48 h-64 bg-gray-800 rounded-md animate-pulse" />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
   const { userData } = useStacks();
 
   // User Games are games in which the user is a player
