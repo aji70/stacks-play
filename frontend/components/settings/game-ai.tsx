@@ -164,9 +164,9 @@ const handlePlay = async () => {
 
     await apiClient.put(`/games/${dbGameId}`, { status: "RUNNING" });
 
-    localStorage.setItem("gameCode", gameCode);
+    // localStorage.setItem("gameCode", gameCode);
     
-    router.push(`/ai-play?gameCode=${gameCode}`);
+    // router.push(`/ai-play?gameCode=${gameCode}`);
 
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : "Failed";
