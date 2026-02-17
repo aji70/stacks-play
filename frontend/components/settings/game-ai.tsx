@@ -19,9 +19,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { generateGameCode } from "@/lib/utils/games";
 import { GamePieces } from "@/lib/constants/games";
-import { apiClient } from "@/lib/api";
 import { useStacks } from "@/hooks/use-stacks";
-import { ClarityValue, TupleCV, UIntCV } from "@stacks/transactions";
 
 export default function PlayWithAI() {
   const {
@@ -29,26 +27,12 @@ export default function PlayWithAI() {
     tycoonUser,
     handleCreateAiGame,
     userData,
-    handleGetGameByCode,
   } = useStacks();
 
   const address = userData?.addresses?.stx?.[0]?.address;
   const router = useRouter();
 
-const ai_address = [
-  "0xA1FF1c93600c3487FABBdAF21B1A360630f8bac6",
-  "0xB2EE17D003e63985f3648f6c1d213BE86B474B11",
-  "0xC3FF882E779aCbc112165fa1E7fFC093e9353B21",
-  "0xD4FFDE5296C3EE6992bAf871418CC3BE84C99C32",
-  "0xE5FF75Fcf243C4cE05B9F3dc5Aeb9F901AA361D1",
-  "0xF6FF469692a259eD5920C15A78640571ee845E8",
-  "0xA7FFE1f969Fa6029Ff2246e79B6A623A665cE69",
-  "0xB8FF2cEaCBb67DbB5bc14D570E7BbF339cE240F6",
-];
-
-
   const username = tycoonUser?.username ?? "";
-  const gameCode = generateGameCode();
 
   const [settings, setSettings] = useState({
     symbol: 1,
@@ -62,15 +46,6 @@ const ai_address = [
     randomPlayOrder: true,
   });
 
-  // --- FIXED TYPE ---
-  type SaveGameResponse = {
-    success: boolean;
-    message: string;
-    data: {
-      id: number;
-    };
-  };
-
 const handlePlay = async () => {
   if (!address || !username || !checkIfRegistered) {
     toast.error("Connect wallet & register first");
@@ -78,95 +53,35 @@ const handlePlay = async () => {
   }
 
   const toastId = toast.loading(
-    `Summoning ${settings.aiCount} AI rival${settings.aiCount > 1 ? "s" : ""}...`
+    `Creating 10 games...`
   );
 
   try {
-    // CREATE ON-CHAIN
-    await handleCreateAiGame(
-      username,
-      settings.aiCount,
-      settings.symbol,
-      settings.aiCount,
-      gameCode,
-      settings.startingCash
-    );
+    // Call handleCreateAiGame 10 times - each will trigger wallet popup
+    for (let i = 0; i < 10; i++) {
+      const uniqueGameCode = generateGameCode();
+      
+      toast.update(toastId, {
+        render: `Creating game ${i + 1} of 10...`,
+      });
 
-    // Add 3-second delay
-    await new Promise(resolve => setTimeout(resolve, 5000));
-
-    const onChainGameId: ClarityValue | null = await handleGetGameByCode(gameCode);
-
-    if (!onChainGameId) throw new Error("On-chain game failed");
-
-    const tuple = onChainGameId as TupleCV;
-
-    // Access your id safely with proper type casting
-    const gameId = ((tuple.value as { id: UIntCV }).id).value; // Assuming tuple.value is an object with 'id' as UIntCV
-
-    toast.update(toastId, { render: "Saving arena..." });
-
-    // SAVE TO BACKEND
-    const saveRes = await apiClient.post<SaveGameResponse>("/games", {
-      id: Number(gameId),
-      code: gameCode,
-      mode: "PRIVATE",
-      address,
-      symbol: settings.symbol,
-      number_of_players: settings.aiCount + 1,
-      ai_opponents: settings.aiCount,
-      ai_difficulty: settings.aiDifficulty,
-      settings: {
-        auction: settings.auction,
-        rent_in_prison: settings.rentInPrison,
-        mortgage: settings.mortgage,
-        even_build: settings.evenBuild,
-        starting_cash: settings.startingCash,
-        randomize_play_order: settings.randomPlayOrder,
-      },
-    });
-
-    const dbGameId = saveRes.data?.id ?? saveRes.data;
-    if (!dbGameId) throw new Error("Invalid backend response");
+      // CREATE ON-CHAIN - this will trigger wallet popup
+      await handleCreateAiGame(
+        username,
+        settings.aiCount,
+        settings.symbol,
+        settings.aiCount,
+        uniqueGameCode,
+        settings.startingCash
+      );
+    }
 
     toast.update(toastId, {
-      render: "Battle begins!",
+      render: "All 10 games created!",
       type: "success",
       isLoading: false,
       autoClose: 2000,
     });
-    
-    const usedSymbols = [settings.symbol];
-
-    for (let i = 0; i < settings.aiCount; i++) {
-      try {
-        const aiAddress = ai_address[i];    
-        const available = GamePieces.filter(p => !usedSymbols.includes(p.value));
-        const aiSymbol = available.length > 0
-          ? available[Math.floor(Math.random() * available.length)].value
-          : 2;  // Consider making this a random valid fallback if "dog" is invalid
-        usedSymbols.push(aiSymbol);
-
-        await apiClient.post("/game-players/join", {
-          address: aiAddress,
-          symbol: aiSymbol,
-          code: gameCode,
-        });
-      } catch (innerErr: unknown) {
-        let errorMessage = "Unknown error";
-        if (innerErr instanceof Error) {
-          errorMessage = innerErr.message;
-        }
-        toast.error(`Failed to create AI player ${i + 1}: ${errorMessage}`);
-        throw innerErr; 
-      }
-    }
-
-    await apiClient.put(`/games/${dbGameId}`, { status: "RUNNING" });
-
-    // localStorage.setItem("gameCode", gameCode);
-    
-    // router.push(`/ai-play?gameCode=${gameCode}`);
 
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : "Failed";
